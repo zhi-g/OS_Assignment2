@@ -12,6 +12,8 @@
 #define DUMMY_TIMESLICE		(100 * HZ / 1000)
 #define DUMMY_AGE_THRESHOLD	(3 * DUMMY_TIMESLICE)
 
+
+
 unsigned int sysctl_sched_dummy_timeslice = DUMMY_TIMESLICE;
 static inline unsigned int get_timeslice()
 {
@@ -32,34 +34,15 @@ static inline unsigned int get_age_threshold()
 
 void init_dummy_rq(struct dummy_rq *dummy_rq, struct rq *rq)
 {
-	
 	//INIT_LIST_HEAD(&dummy_rq->queue);
-	struct rt_prio_array *array;
+	struct dummy_prio_array *array;
 	int i;
 
-	array = &dummy_rq->active;
+	array = &dummy_rq->array;
 	for (i = 0; i < MAX_DUMMY_PRIO; i++) {
-		INIT_LIST_HEAD(array->queue + i);
-		//__clear_bit(i, array->bitmap);
+		INIT_LIST_HEAD(array->queues + i);
 	}
-
-
-	/* delimiter for bitsearch: */
-	//__set_bit(MAX_RT_PRIO, array->bitmap);
-
-/*
-#if defined CONFIG_SMP
-	rt_rq->highest_prio.curr = MAX_RT_PRIO;
-	rt_rq->highest_prio.next = MAX_RT_PRIO;
-	rt_rq->rt_nr_migratory = 0;
-	rt_rq->overloaded = 0;
-	plist_head_init(&rt_rq->pushable_tasks);
-#endif
-
-	rt_rq->rt_time = 0;
-	rt_rq->rt_throttled = 0;
-	rt_rq->rt_runtime = 0;
-	raw_spin_lock_init(&rt_rq->rt_runtime_lock);*/
+	
 }
 
 /*
@@ -74,7 +57,8 @@ static inline struct task_struct *dummy_task_of(struct sched_dummy_entity *dummy
 static inline void _enqueue_task_dummy(struct rq *rq, struct task_struct *p)
 {
 	struct sched_dummy_entity *dummy_se = &p->dummy_se;
-	struct list_head *queue = &rq->dummy.queue;
+	struct dummy_prio_array *array = &rq->dummy.array;
+	struct list_head *queue = array->queues + DUMMY_MAX_PRIO - (DUMMY_PRIO_UPPER_BOUND - (int)(p->priority)) -1;
 	list_add_tail(&dummy_se->run_list, queue);
 }
 

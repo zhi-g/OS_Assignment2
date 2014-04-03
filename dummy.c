@@ -40,7 +40,7 @@ void init_dummy_rq(struct dummy_rq *dummy_rq, struct rq *rq)
 
 	array = &dummy_rq->array;
 	for (i = 0; i < MAX_DUMMY_PRIO; i++) {
-		INIT_LIST_HEAD(array->queue + i);
+		INIT_LIST_HEAD(array->queues + i);
 	}
 	
 }
@@ -58,12 +58,12 @@ static inline void _enqueue_task_dummy(struct rq *rq, struct task_struct *p)
 {
 	struct sched_dummy_entity *dummy_se = &p->dummy_se;
 	struct dummy_prio_array *array = &rq->dummy.array;
-	struct list_head *queue = array->queues + DUMMY_MAX_PRIO - (DUMMY_PRIO_UPPER_BOUND - (int)(p->priority)) -1;
+	struct list_head *queue = array->queues + get_list_prio(p);
 	list_add_tail(&dummy_se->run_list, queue);
 }
 
-static inline void _dequeue_task_dummy(struct task_struct *p)
-{
+static inline void _dequeue_task_dummy(struct task_struct *p, struct rq *rq)
+{	
 	struct sched_dummy_entity *dummy_se = &p->dummy_se;
 	list_del_init(&dummy_se->run_list);
 }
@@ -80,29 +80,41 @@ static void enqueue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 
 static void dequeue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 {
-	_dequeue_task_dummy(p);
+	_dequeue_task_dummy(p, rq);
 	dec_nr_running(rq);
 }
 
 static void yield_task_dummy(struct rq *rq)
 {
+	task_struct *p = rq->curr;
+	dequeue_task_dummy(rq,p,0);
+	enqueue_task_dummy(rq, p, 0);
+	
+	
 }
 
 static void check_preempt_curr_dummy(struct rq *rq, struct task_struct *p, int flags)
 {
+	task_struct *current = rq->curr;
+	if(get_list_prio(p) < get_list_prio(current)) {
+		//dequeue_task_dummy(rq,p,0);
+		//enqueue_task_dummy(rq, p, 0);
+		resched_task(current);	
+	}
 }
 
 static struct task_struct *pick_next_task_dummy(struct rq *rq)
 {
 	struct dummy_rq *dummy_rq = &rq->dummy;
 	struct sched_dummy_entity *next;
-
-	if (!list_empty(&dummy_rq->queue)) {
-		next = list_first_entry(&dummy_rq->queue, struct sched_dummy_entity, run_list);
-		return dummy_task_of(next);
-	} else {
-		return NULL;
+	int i;
+	for(int i=0; i<MAX_DUMMY_PRIO; ++i){
+		if (!list_empty(&dummy_rq->array->queues + i)) {
+			next = list_first_entry(&dummy_rq->array->queues + i, struct sched_dummy_entity, run_list);
+			return dummy_task_of(next);
+		} else {}
 	}
+	return NULL;
 }
 
 static void put_prev_task_dummy(struct rq *rq, struct task_struct *prev)
@@ -132,6 +144,10 @@ static void prio_changed_dummy(struct rq *rq, struct task_struct *p, int oldprio
 static unsigned int get_rr_interval_dummy(struct rq *rq, struct task_struct *p)
 {
 	return get_timeslice();
+}
+
+static inline int get_list_prio(struct task_struc *p){
+	return DUMMY_MAX_PRIO - (DUMMY_PRIO_UPPER_BOUND - (int)(p->priority))-1;
 }
 
 /*
