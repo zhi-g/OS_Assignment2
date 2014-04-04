@@ -41,7 +41,11 @@ void init_dummy_rq(struct dummy_rq *dummy_rq, struct rq *rq)
 	array = &dummy_rq->array;
 	for (i = 0; i < MAX_DUMMY_PRIO; i++) {
 		INIT_LIST_HEAD(array->queues + i);
+		__clear_bit(i, array->bitmap);
 	}
+	
+	/* delimiter for bitsearch: */
+	__set_bit(MAX_RT_PRIO, array->bitmap);
 	
 }
 
@@ -119,6 +123,7 @@ static struct task_struct *pick_next_task_dummy(struct rq *rq)
 
 static void put_prev_task_dummy(struct rq *rq, struct task_struct *prev)
 {
+	
 }
 
 static void set_curr_task_dummy(struct rq *rq)
@@ -126,11 +131,11 @@ static void set_curr_task_dummy(struct rq *rq)
 	struct task_struct *p = rq->curr;
 	p->se.exec_start = rq_clock_task(rq);
 	dequeue_task_dummy(rq->curr);
-
 }
 
 static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 {
+
 	struct sched_dummy_entity dummy_se = curr->dummy_se;
 	
 	if (--p->dummy_se.time_slice)
@@ -149,21 +154,22 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 			set_tsk_need_resched(p);
 			return;
 		}
-	}
-	
-	
+	}	
 }
 
 static void switched_from_dummy(struct rq *rq, struct task_struct *p)
 {
+	
 }
 
 static void switched_to_dummy(struct rq *rq, struct task_struct *p)
 {
+	
 }
 
 static void prio_changed_dummy(struct rq *rq, struct task_struct *p, int oldprio)
 {
+	
 }
 
 static unsigned int get_rr_interval_dummy(struct rq *rq, struct task_struct *p)

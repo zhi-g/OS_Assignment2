@@ -373,7 +373,8 @@ struct dummy_rq {
 };
 
 struct dummy_prio_array{
-	struct list_head queues[MAX_DUMMY_PRIO];	
+	DECLARE_BITMAP(bitmap, MAX_DUMMY_PRIO); /* include 1 bit for delimiter */
+	struct list_head queues[MAX_DUMMY_PRIO];
 };
 
 #ifdef CONFIG_SMP
