@@ -12,8 +12,7 @@
 #define DUMMY_TIMESLICE		(100 * HZ / 1000)
 #define DUMMY_AGE_THRESHOLD	(3 * DUMMY_TIMESLICE)
 
-#define for_each_sched_dummy_entity(dummy_se) \
-	for (; dummy_se; dummy_se = NULL)
+
 
 
 unsigned int sysctl_sched_dummy_timeslice = DUMMY_TIMESLICE;
@@ -34,18 +33,17 @@ static inline unsigned int get_age_threshold()
 
 void init_dummy_rq(struct dummy_rq *dummy_rq, struct rq *rq)
 {
-	//INIT_LIST_HEAD(&dummy_rq->queue);
 	struct dummy_prio_array *array;
 	int i;
 
 	array = &dummy_rq->array;
 	for (i = 0; i < MAX_DUMMY_PRIO; i++) {
 		INIT_LIST_HEAD(array->queues + i);
-		__clear_bit(i, array->bitmap);
+		//__clear_bit(i, array->bitmap);
 	}
 	
 	/* delimiter for bitsearch: */
-	__set_bit(MAX_RT_PRIO, array->bitmap);
+	//__set_bit(MAX_RT_PRIO, array->bitmap);
 	
 }
 
@@ -91,7 +89,7 @@ static void dequeue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 static void yield_task_dummy(struct rq *rq)
 {
 	task_struct *p = rq->curr;
-	dequeue_task_dummy(rq, p, 0);
+	dequeue_taks_dummy(rq, p, 0);
 	enqueue_task_dummy(rq, p, 0);
 }
 
@@ -128,22 +126,21 @@ static void set_curr_task_dummy(struct rq *rq)
 {
 	struct task_struct *p = rq->curr;
 	p->se.exec_start = rq_clock_task(rq);
-	dequeue_task_dummy(r1,rq->curr,0);
+	//dequeue_task_dummy(r1,rq->curr,0);
 }
 
 static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 {
-
-	struct sched_dummy_entity dummy_se = curr->dummy_se;
 	
-	if (--p->dummy_se.time_slice)
+	if (--curr->dummy_se.time_slice)
 		return;
 	/*
 	 * Requeue to the end of queue if we (and all of our ancestors) are the
 	 * only element on the queue
 	 */
 	dequeue_dummy_task(rq, curr, queued);
-	enqueue_dummy_task(rq, curr, queued);	
+	enqueue_dummy_task(rq, curr, queued);
+	schedule();	
 }
 
 static void switched_from_dummy(struct rq *rq, struct task_struct *p)

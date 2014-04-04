@@ -12,8 +12,7 @@
 #define DUMMY_TIMESLICE		(100 * HZ / 1000)
 #define DUMMY_AGE_THRESHOLD	(3 * DUMMY_TIMESLICE)
 
-#define for_each_sched_dummy_entity(dummy_se) \
-	for (; dummy_se; dummy_se = NULL)
+
 
 
 unsigned int sysctl_sched_dummy_timeslice = DUMMY_TIMESLICE;
@@ -91,7 +90,7 @@ static void dequeue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 static void yield_task_dummy(struct rq *rq)
 {
 	task_struct *p = rq->curr;
-	dequeue_task_dummy(rq, p, 0);
+	dequeue_taks_dummy(rq, p, 0);
 	enqueue_task_dummy(rq, p, 0);
 }
 
