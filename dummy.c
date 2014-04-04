@@ -130,7 +130,7 @@ static void set_curr_task_dummy(struct rq *rq)
 {
 	struct task_struct *p = rq->curr;
 	p->se.exec_start = rq_clock_task(rq);
-	dequeue_task_dummy(rq->curr);
+	dequeue_task_dummy(r1,rq->curr,0);
 }
 
 static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
@@ -144,17 +144,8 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 	 * Requeue to the end of queue if we (and all of our ancestors) are the
 	 * only element on the queue
 	 */
-	for_each_sched_dummy_entity(dummy_se) {
-		if (dummy_se->run_list.prev != dummy_se->run_list.next) {
-			/*
-				TODO
-			*/			
-
-
-			set_tsk_need_resched(p);
-			return;
-		}
-	}	
+	dequeue_dummy_task(rq, curr, queued);
+	enqueue_dummy_task(rq, curr, queued);	
 }
 
 static void switched_from_dummy(struct rq *rq, struct task_struct *p)

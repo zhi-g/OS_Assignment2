@@ -128,19 +128,14 @@ static void put_prev_task_dummy(struct rq *rq, struct task_struct *prev)
 
 static void set_curr_task_dummy(struct rq *rq)
 {
-<<<<<<< HEAD
 	struct task_struct *p = rq->curr;
 	p->se.exec_start = rq_clock_task(rq);
 	dequeue_task_dummy(rq->curr);
-
-=======
-	
->>>>>>> 9213757783b9b5e9443bb1ca70f6970c261f4473
 }
 
 static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 {
-<<<<<<< HEAD
+
 	struct sched_dummy_entity dummy_se = curr->dummy_se;
 	
 	if (--p->dummy_se.time_slice)
@@ -159,11 +154,7 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 			set_tsk_need_resched(p);
 			return;
 		}
-	}
-	
-=======
->>>>>>> 9213757783b9b5e9443bb1ca70f6970c261f4473
-	
+	}	
 }
 
 static void switched_from_dummy(struct rq *rq, struct task_struct *p)
