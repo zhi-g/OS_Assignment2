@@ -12,6 +12,8 @@
 #define DUMMY_TIMESLICE		(100 * HZ / 1000)
 #define DUMMY_AGE_THRESHOLD	(3 * DUMMY_TIMESLICE)
 
+#define for_each_sched_dummy_entity(dummy_se) \
+	for (; dummy_se; dummy_se = NULL)
 
 
 unsigned int sysctl_sched_dummy_timeslice = DUMMY_TIMESLICE;
@@ -24,8 +26,6 @@ unsigned int sysctl_sched_dummy_age_threshold = DUMMY_AGE_THRESHOLD;
 static inline unsigned int get_age_threshold()
 {
 	return sysctl_sched_dummy_age_threshold;
-
-	
 }
 
 /*
@@ -99,9 +99,9 @@ static void check_preempt_curr_dummy(struct rq *rq, struct task_struct *p, int f
 {
 	task_struct *current = rq->curr;
 	if(get_list_prio(p) < get_list_prio(current)) {
-		//dequeue_task_dummy(rq,p,0);
-		//enqueue_task_dummy(rq, p, 0);
-		resched_task(current);	
+		dequeue_task_dummy(rq,p,0);
+		enqueue_task_dummy(rq, p, 0);
+		schedule();	
 	}
 }
 
@@ -126,12 +126,33 @@ static void put_prev_task_dummy(struct rq *rq, struct task_struct *prev)
 
 static void set_curr_task_dummy(struct rq *rq)
 {
-	
+	struct task_struct *p = rq->curr;
+	p->se.exec_start = rq_clock_task(rq);
+	dequeue_task_dummy(rq->curr);
 }
 
 static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 {
+
+	struct sched_dummy_entity dummy_se = curr->dummy_se;
 	
+	if (--p->dummy_se.time_slice)
+		return;
+	/*
+	 * Requeue to the end of queue if we (and all of our ancestors) are the
+	 * only element on the queue
+	 */
+	for_each_sched_dummy_entity(dummy_se) {
+		if (dummy_se->run_list.prev != dummy_se->run_list.next) {
+			/*
+				TODO
+			*/			
+
+
+			set_tsk_need_resched(p);
+			return;
+		}
+	}	
 }
 
 static void switched_from_dummy(struct rq *rq, struct task_struct *p)
