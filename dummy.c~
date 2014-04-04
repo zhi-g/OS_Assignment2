@@ -41,7 +41,11 @@ void init_dummy_rq(struct dummy_rq *dummy_rq, struct rq *rq)
 	array = &dummy_rq->array;
 	for (i = 0; i < MAX_DUMMY_PRIO; i++) {
 		INIT_LIST_HEAD(array->queues + i);
+		__clear_bit(i, array->bitmap);
 	}
+	
+	/* delimiter for bitsearch: */
+	__set_bit(MAX_RT_PRIO, array->bitmap);
 	
 }
 
@@ -87,10 +91,8 @@ static void dequeue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 static void yield_task_dummy(struct rq *rq)
 {
 	task_struct *p = rq->curr;
-	dequeue_task_dummy(rq,p,0);
+	dequeue_task_dummy(rq, p, 0);
 	enqueue_task_dummy(rq, p, 0);
-	
-	
 }
 
 static void check_preempt_curr_dummy(struct rq *rq, struct task_struct *p, int flags)
@@ -119,26 +121,32 @@ static struct task_struct *pick_next_task_dummy(struct rq *rq)
 
 static void put_prev_task_dummy(struct rq *rq, struct task_struct *prev)
 {
+	
 }
 
 static void set_curr_task_dummy(struct rq *rq)
 {
+	
 }
 
 static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 {
+	
 }
 
 static void switched_from_dummy(struct rq *rq, struct task_struct *p)
 {
+	
 }
 
 static void switched_to_dummy(struct rq *rq, struct task_struct *p)
 {
+	
 }
 
 static void prio_changed_dummy(struct rq *rq, struct task_struct *p, int oldprio)
 {
+	
 }
 
 static unsigned int get_rr_interval_dummy(struct rq *rq, struct task_struct *p)

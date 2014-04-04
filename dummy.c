@@ -91,10 +91,8 @@ static void dequeue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 static void yield_task_dummy(struct rq *rq)
 {
 	task_struct *p = rq->curr;
-	dequeue_task_dummy(rq,p,0);
+	dequeue_task_dummy(rq, p, 0);
 	enqueue_task_dummy(rq, p, 0);
-	
-	
 }
 
 static void check_preempt_curr_dummy(struct rq *rq, struct task_struct *p, int flags)
@@ -148,7 +146,16 @@ static void switched_to_dummy(struct rq *rq, struct task_struct *p)
 
 static void prio_changed_dummy(struct rq *rq, struct task_struct *p, int oldprio)
 {
-	
+	if (!p->on_rq) {
+		return;
+	}
+
+	if (rq->curr == p) {
+		if (p->prio > oldprio)
+			resched_task(rq->curr);
+	} else {
+		check_preempt_curr(rq, p, 0);
+	}
 }
 
 static unsigned int get_rr_interval_dummy(struct rq *rq, struct task_struct *p)
