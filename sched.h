@@ -367,15 +367,17 @@ struct rt_rq {
 #endif
 };
 
+struct dummy_prio_array{
+	DECLARE_BITMAP(bitmap, MAX_DUMMY_PRIO); /* include 1 bit for delimiter */
+	struct list_head queues[MAX_DUMMY_PRIO];
+};
+
 struct dummy_rq {
 	struct dummy_prio_array array;
 	//struct list_head queue;
 };
 
-struct dummy_prio_array{
-	DECLARE_BITMAP(bitmap, MAX_DUMMY_PRIO); /* include 1 bit for delimiter */
-	struct list_head queues[MAX_DUMMY_PRIO];
-};
+
 
 #ifdef CONFIG_SMP
 

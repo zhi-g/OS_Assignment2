@@ -16,6 +16,8 @@
 
 
 unsigned int sysctl_sched_dummy_timeslice = DUMMY_TIMESLICE;
+
+
 static inline unsigned int get_timeslice()
 {
 	return sysctl_sched_dummy_timeslice;
@@ -50,6 +52,10 @@ void init_dummy_rq(struct dummy_rq *dummy_rq, struct rq *rq)
 /*
  * Helper functions
  */
+
+static inline int get_list_prio(struct task_struct *p){
+	return MAX_DUMMY_PRIO - (DUMMY_PRIO_UPPER_BOUND - (int)(p->prio))-1;
+}
 
 static inline struct task_struct *dummy_task_of(struct sched_dummy_entity *dummy_se)
 {
@@ -88,17 +94,17 @@ static void dequeue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 
 static void yield_task_dummy(struct rq *rq)
 {
-	task_struct *p = rq->curr;
-	dequeue_taks_dummy(rq, p, 0);
+	struct task_struct *p = rq->curr;
+	dequeue_task_dummy(rq, p, 0);
 	enqueue_task_dummy(rq, p, 0);
 }
 
 static void check_preempt_curr_dummy(struct rq *rq, struct task_struct *p, int flags)
 {
-	task_struct *current = rq->curr;
-	if(get_list_prio(p) < get_list_prio(current)) {
-		dequeue_task_dummy(rq,p,0);
-		enqueue_task_dummy(rq, p, 0);
+	struct task_struct *curr = rq->curr;
+	if(get_list_prio(p) < get_list_prio(curr)) {
+		dequeue_task_dummy(rq, curr,0);
+		enqueue_task_dummy(rq, curr, 0);
 		schedule();	
 	}
 }
@@ -108,9 +114,9 @@ static struct task_struct *pick_next_task_dummy(struct rq *rq)
 	struct dummy_rq *dummy_rq = &rq->dummy;
 	struct sched_dummy_entity *next;
 	int i;
-	for(int i=0; i<MAX_DUMMY_PRIO; ++i){
-		if (!list_empty(&dummy_rq->array->queues + i)) {
-			next = list_first_entry(&dummy_rq->array->queues + i, struct sched_dummy_entity, run_list);
+	for(i=0; i<MAX_DUMMY_PRIO; ++i){
+		if (!list_empty(dummy_rq->array.queues + i)) {
+			next = list_first_entry(dummy_rq->array.queues + i, struct sched_dummy_entity, run_list);
 			return dummy_task_of(next);
 		} else {}
 	}
@@ -126,7 +132,7 @@ static void set_curr_task_dummy(struct rq *rq)
 {
 	struct task_struct *p = rq->curr;
 	p->se.exec_start = rq_clock_task(rq);
-	//dequeue_task_dummy(r1,rq->curr,0);
+
 }
 
 static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
@@ -138,8 +144,8 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 	 * Requeue to the end of queue if we (and all of our ancestors) are the
 	 * only element on the queue
 	 */
-	dequeue_dummy_task(rq, curr, queued);
-	enqueue_dummy_task(rq, curr, queued);
+	dequeue_task_dummy(rq, curr, queued);
+	enqueue_task_dummy(rq, curr, queued);
 	schedule();	
 }
 
@@ -172,9 +178,7 @@ static unsigned int get_rr_interval_dummy(struct rq *rq, struct task_struct *p)
 	return get_timeslice();
 }
 
-static inline int get_list_prio(struct task_struc *p){
-	return DUMMY_MAX_PRIO - (DUMMY_PRIO_UPPER_BOUND - (int)(p->priority))-1;
-}
+
 
 /*
  * Scheduling class
