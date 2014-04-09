@@ -144,9 +144,12 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 	 * Requeue to the end of queue if we (and all of our ancestors) are the
 	 * only element on the queue
 	 */
+	
+	dummy_se->time_slice = get_timeslice();
+
 	dequeue_task_dummy(rq, curr, queued);
 	enqueue_task_dummy(rq, curr, queued);
-	schedule();	
+	resched_task(curr);
 }
 
 static void switched_from_dummy(struct rq *rq, struct task_struct *p)
