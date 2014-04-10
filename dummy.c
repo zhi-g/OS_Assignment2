@@ -35,6 +35,8 @@ static inline unsigned int get_age_threshold()
 
 void init_dummy_rq(struct dummy_rq *dummy_rq, struct rq *rq)
 {
+	// Exemple pour utiliser printk
+	printk(KERN_CRIT "enqueue: %d\n",p->pid);
 	struct dummy_prio_array *array;
 	int i;
 
@@ -83,12 +85,18 @@ static inline void _dequeue_task_dummy(struct task_struct *p, struct rq *rq)
 static void enqueue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 {
 	_enqueue_task_dummy(rq, p);
+	if (p->dummy_se.time_slice >= get_timeslice()) {
+		p->dummy_se.time_slice = 0;
+	}
 	inc_nr_running(rq);
 }
 
 static void dequeue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 {
 	_dequeue_task_dummy(p, rq);
+	if (p->dummy_se.aging >= get_age_threshold()) {
+		p->dummy_se.aging = 0;
+	}
 	dec_nr_running(rq);
 }
 
@@ -105,7 +113,7 @@ static void check_preempt_curr_dummy(struct rq *rq, struct task_struct *p, int f
 	if(get_list_prio(p) < get_list_prio(curr)) {
 		dequeue_task_dummy(rq, curr,0);
 		enqueue_task_dummy(rq, curr, 0);
-		schedule();	
+		resched_task(rq->curr);	
 	}
 }
 
@@ -125,44 +133,46 @@ static struct task_struct *pick_next_task_dummy(struct rq *rq)
 
 static void put_prev_task_dummy(struct rq *rq, struct task_struct *prev)
 {
-	
 }
 
+// Sert seulement si on change de scheduler au milieu, ce qui n est pas le cas ici
 static void set_curr_task_dummy(struct rq *rq)
 {
-	struct task_struct *p = rq->curr;
-	p->se.exec_start = rq_clock_task(rq);
 }
 
 static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 {
-	
-	if (--curr->dummy_se.time_slice)
-		return;
-	/*
-	 * Requeue to the end of queue if we (and all of our ancestors) are the
-	 * only element on the queue
-	 */
-	
-	curr->dummy_se.time_slice = get_timeslice();
+	curr->dummy_se.time_slice++;
+	if (curr->dummy_se.time_slice >= get_timeslice()) {
+		dequeue_task_dummy(rq, curr, queued);
+		enqueue_task_dummy(rq, curr, queued);
+		resched_task(curr);
+	}
 
-	dequeue_task_dummy(rq, curr, queued);
-	enqueue_task_dummy(rq, curr, queued);
-	resched_task(curr);
-}
+	int i;
+	for (i = 0; i < MAX_DUMMY_PRIO; i++) {
+		// safe, c'est pour pouvoir continuer a iterer sur la liste en changeant des trucs quand meme
+		// pp.ipd.kit.edu/firm/api_latest/a00088.html
+		// Iterer sur chaque liste de priorite (je sais pas comment faire)
+		list_for_each_safe(dummy_rq->array.queues, liste temp, head) {
+			// si aging >= get_age_threshold()
+			// decrementer la prio (static_prio c'est celle qui reste toujours pareil et prio, celle qui change
+			// dequeue, enqueue, resched
+		}
+	}
 
 static void switched_from_dummy(struct rq *rq, struct task_struct *p)
 {
-	
 }
 
 static void switched_to_dummy(struct rq *rq, struct task_struct *p)
 {
-	
 }
 
 static void prio_changed_dummy(struct rq *rq, struct task_struct *p, int oldprio)
 {
+
+// pas besoin?
 	if (!p->on_rq) {
 		return;
 	}
