@@ -132,6 +132,7 @@ static void set_curr_task_dummy(struct rq *rq)
 {
 	struct task_struct *p = rq->curr;
 	p->se.exec_start = rq_clock_task(rq);
+
 }
 
 static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
@@ -144,7 +145,7 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 	 * only element on the queue
 	 */
 	
-	curr->dummy_se.time_slice = get_timeslice();
+	dummy_se->time_slice = get_timeslice();
 
 	dequeue_task_dummy(rq, curr, queued);
 	enqueue_task_dummy(rq, curr, queued);
