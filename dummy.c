@@ -148,7 +148,7 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 
 	if (curr->dummy_se.time_slice >= get_timeslice()) {
 		curr->prio = curr->static_prio;
-		dummy->aging = 0;
+		curr->dummy_se.aging = 0;
 		dequeue_task_dummy(rq, curr, queued);
 		enqueue_task_dummy(rq, curr, queued);
 		resched_task(curr);
