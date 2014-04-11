@@ -88,9 +88,6 @@ static void enqueue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 static void dequeue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 {
 	_dequeue_task_dummy(p, rq);	
-	if (p->dummy_se.aging >= get_age_threshold()) {
-		p->dummy_se.aging = 0;
-	}
 	dec_nr_running(rq);
 }
 
@@ -98,6 +95,10 @@ static void yield_task_dummy(struct rq *rq)
 {
 	struct task_struct *p = rq->curr;
 	dequeue_task_dummy(rq, p, 0);
+	if (p->dummy_se.aging >= get_age_threshold()) {
+		p->dummy_se.aging = 0;
+		p->prio = p->static_prio;
+	}
 	enqueue_task_dummy(rq, p, 0);
 }
 
