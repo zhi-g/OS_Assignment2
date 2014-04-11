@@ -159,7 +159,7 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 		list_for_each_entry_safe(dummy, dummy_temp, rq->dummy.array.queues + i, run_list) {
 			dummy->aging++;
 			if(dummy->aging >= get_age_threshold() && dummy_task_of(dummy)->prio > DUMMY_PRIO_UPPER_BOUND - 5) {
-				printk(KERN_CRIT "process %d aged\n",p->pid);
+				printk(KERN_CRIT "process %d aged\n",dummy_task_of(dummy)->pid);
 				dummy_task_of(dummy)->prio = dummy_task_of(dummy)->prio-1;
 				dequeue_task_dummy(rq, dummy_task_of(dummy), queued);
  				enqueue_task_dummy(rq, dummy_task_of(dummy), queued);
