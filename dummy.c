@@ -77,7 +77,7 @@ static inline void _dequeue_task_dummy(struct task_struct *p, struct rq *rq)
 
 static void enqueue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 {
-	printk(KERN_CRIT "enqueue: %d\n",p->pid);
+	printk(KERN_CRIT "enqueued: %d\n",p->pid);
 	_enqueue_task_dummy(rq, p);	
 	if (p->dummy_se.time_slice >= get_timeslice()) {
 		p->dummy_se.time_slice = 0;
@@ -158,14 +158,13 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 		struct sched_dummy_entity *dummy;
 		struct sched_dummy_entity *dummy_temp;
 		list_for_each_entry_safe(dummy, dummy_temp, rq->dummy.array.queues + i, run_list) {
-			//struct dummy_se *object = list_entry(dummy, struct dummy_se, run_list);
-			struct sched_dummy_entity *object = dummy;
 			dummy->aging++;
-			if(dummy->aging >= get_age_threshold() && dummy_task_of(object)->prio > DUMMY_PRIO_UPPER_BOUND - 5) {
-				dummy_task_of(object)->prio = dummy_task_of(object)->prio-1;
-				dequeue_task_dummy(rq, dummy_task_of(object), queued);
- 				enqueue_task_dummy(rq, dummy_task_of(object), queued);
- 				resched_task(curr);
+			if(dummy->aging >= get_age_threshold() && dummy_task_of(dummy)->prio > DUMMY_PRIO_UPPER_BOUND - 5) {
+				dummy_task_of(dummy)->prio = dummy_task_of(dummy)->prio-1;
+				dequeue_task_dummy(rq, dummy_task_of(dummy), queued);
+ 				enqueue_task_dummy(rq, dummy_task_of(dummy), queued);
+ 				resched_task(dummy_task_of(dummy));
+				check_preempt_curr_dummy(rq, dummy_task_of(dummy), queued);
 			}
 		}
 	}
