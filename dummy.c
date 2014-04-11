@@ -162,8 +162,8 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 			struct sched_dummy_entity *object = dummy;
 			if(dummy->aging >= get_age_threshold() && dummy_task_of(object)->prio > DUMMY_PRIO_UPPER_BOUND - 5) {
 				dummy_task_of(object)->prio = dummy_task_of(object)->prio-1;
-				dequeue_task_dummy(rq, dummy_task_of(object)->prio, queued);
- 				enqueue_task_dummy(rq, dummy_task_of(object)->prio, queued);
+				dequeue_task_dummy(rq, dummy_task_of(object), queued);
+ 				enqueue_task_dummy(rq, dummy_task_of(object), queued);
  				resched_task(curr);
 			}
 		}
