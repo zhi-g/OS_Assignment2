@@ -160,6 +160,7 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 		list_for_each_entry_safe(dummy, dummy_temp, rq->dummy.array.queues + i, run_list) {
 			//struct dummy_se *object = list_entry(dummy, struct dummy_se, run_list);
 			struct sched_dummy_entity *object = dummy;
+			dummy->aging++;
 			if(dummy->aging >= get_age_threshold() && dummy_task_of(object)->prio > DUMMY_PRIO_UPPER_BOUND - 5) {
 				dummy_task_of(object)->prio = dummy_task_of(object)->prio-1;
 				dequeue_task_dummy(rq, dummy_task_of(object), queued);
