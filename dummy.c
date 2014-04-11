@@ -41,12 +41,7 @@ void init_dummy_rq(struct dummy_rq *dummy_rq, struct rq *rq)
 	array = &dummy_rq->array;
 	for (i = 0; i < NBR_DUMMY_PRIO; i++) {
 		INIT_LIST_HEAD(array->queues + i);
-		//__clear_bit(i, array->bitmap);
 	}
-	
-	/* delimiter for bitsearch: */
-	//__set_bit(MAX_RT_PRIO, array->bitmap);
-	
 }
 
 /*
@@ -82,6 +77,7 @@ static inline void _dequeue_task_dummy(struct task_struct *p, struct rq *rq)
 
 static void enqueue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 {
+	printk(KERN_CRIT "enqueue: %d\n",p->pid);
 	_enqueue_task_dummy(rq, p);	
 	if (p->dummy_se.time_slice >= get_timeslice()) {
 		p->dummy_se.time_slice = 0;
@@ -91,10 +87,10 @@ static void enqueue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 
 static void dequeue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 {
-	_dequeue_task_dummy(p, rq);
-	// Don't we need to set prio to the value of static_prio	
+	_dequeue_task_dummy(p, rq);	
 	if (p->dummy_se.aging >= get_age_threshold()) {
 		p->dummy_se.aging = 0;
+		p->prio = p->static_prio;
 	}
 	dec_nr_running(rq);
 }
@@ -141,13 +137,11 @@ static void set_curr_task_dummy(struct rq *rq)
 
 static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 {
-	
-	/*if (--curr->dummy_se.time_slice)
-		return;*/
 	/*
 	 * Requeue to the end of queue if we (and all of our ancestors) are the
 	 * only element on the queue
 	 */
+	int i;
 
 	curr->dummy_se.time_slice++;
 
@@ -157,22 +151,19 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 		resched_task(curr);
 	}
 	
-	/*dummy_se->time_slice = get_timeslice();
-
-	dequeue_task_dummy(rq, curr, queued);
-	enqueue_task_dummy(rq, curr, queued);
-	resched_task(curr);*/
-
-	int i;
 	for (i = 0; i < NBR_DUMMY_PRIO; i++) {
-		// safe, c'est pour pouvoir continuer a iterer sur la liste en changeant des trucs quand meme
-		// pp.ipd.kit.edu/firm/api_latest/a00088.html
-		// Iterer sur chaque liste de priorite (je sais pas comment faire)
-		//list_for_each_safe(rq->dummy.array.queues, liste temp, head) {
-			// si aging >= get_age_threshold()
-			// decrementer la prio (static_prio c'est celle qui reste toujours pareil et prio, celle qui change
-			// dequeue, enqueue, resched
-		//}
+		/*struct list_head *temp;
+		INIT_LIST_HEAD(temp);*/
+		struct task_struct task;
+		struct task_struct temp;
+		list_for_each_entry_safe(task, temp, dummy_rq->array.queues[i], run_list) {
+			if(task->aging >= get_age_threshold()) {
+				task->prio = task->prio-1;
+				dequeue_task_dummy(rq, curr, queued);
+ 				enqueue_task_dummy(rq, curr, queued);
+ 				resched_task(curr);
+			}
+		}
 	}
 }
 

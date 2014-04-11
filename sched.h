@@ -368,8 +368,7 @@ struct rt_rq {
 };
 
 struct dummy_prio_array{
-	//DECLARE_BITMAP(bitmap, MAX_DUMMY_PRIO); /* include 1 bit for delimiter */
-	struct list_head queues[MAX_DUMMY_PRIO];
+	struct list_head queues[NBR_DUMMY_PRIO];
 };
 
 struct dummy_rq {
