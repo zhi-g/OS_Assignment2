@@ -36,12 +36,12 @@ static inline unsigned int get_age_threshold()
 void init_dummy_rq(struct dummy_rq *dummy_rq, struct rq *rq)
 {
 	// Exemple pour utiliser printk
-	printk(KERN_CRIT "enqueue: %d\n",p->pid);
+	//printk(KERN_CRIT "enqueue: %d\n",p->pid);
 	struct dummy_prio_array *array;
 	int i;
 
 	array = &dummy_rq->array;
-	for (i = 0; i < MAX_DUMMY_PRIO; i++) {
+	for (i = 0; i < NBR_DUMMY_PRIO; i++) {
 		INIT_LIST_HEAD(array->queues + i);
 		//__clear_bit(i, array->bitmap);
 	}
@@ -122,7 +122,7 @@ static struct task_struct *pick_next_task_dummy(struct rq *rq)
 	struct dummy_rq *dummy_rq = &rq->dummy;
 	struct sched_dummy_entity *next;
 	int i;
-	for(i=0; i<MAX_DUMMY_PRIO; ++i){
+	for(i=0; i<NBR_DUMMY_PRIO; ++i){
 		if (!list_empty(dummy_rq->array.queues + i)) {
 			next = list_first_entry(dummy_rq->array.queues + i, struct sched_dummy_entity, run_list);
 			return dummy_task_of(next);
@@ -150,15 +150,15 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 	}
 
 	int i;
-	for (i = 0; i < MAX_DUMMY_PRIO; i++) {
+	for (i = 0; i < NBR_DUMMY_PRIO; i++) {
 		// safe, c'est pour pouvoir continuer a iterer sur la liste en changeant des trucs quand meme
 		// pp.ipd.kit.edu/firm/api_latest/a00088.html
 		// Iterer sur chaque liste de priorite (je sais pas comment faire)
-		list_for_each_safe(dummy_rq->array.queues, liste temp, head) {
+		//list_for_each_safe(dummy_rq->array.queues, liste temp, head) {
 			// si aging >= get_age_threshold()
 			// decrementer la prio (static_prio c'est celle qui reste toujours pareil et prio, celle qui change
 			// dequeue, enqueue, resched
-		}
+		//}
 	}
 
 static void switched_from_dummy(struct rq *rq, struct task_struct *p)

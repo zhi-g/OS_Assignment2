@@ -21,7 +21,8 @@ extern long calc_load_fold_active(struct rq *this_rq);
 extern void update_cpu_load_active(struct rq *this_rq);
 
 //Define priority for dummy
-#define MAX_DUMMY_PRIO		5
+#define NBR_DUMMY_PRIO		5
+//#define MAX_DUMMY_PRIO		5
 #define DUMMY_PRIO_UPPER_BOUND	135
 
 
@@ -369,8 +370,9 @@ struct rt_rq {
 
 struct dummy_prio_array{
 // Normalement pas besoin du bitmap du tout =)
-//	DECLARE_BITMAP(bitmap, MAX_DUMMY_PRIO); /* include 1 bit for delimiter */
-	struct list_head queues[MAX_DUMMY_PRIO];
+//	DECLARE_BITMAP(bitmap, NBR_DUMMY_PRIO); /* include 1 bit for delimiter */
+//	struct list_head queues[MAX_DUMMY_PRIO];
+	struct list_head queues[NBR_DUMMY_PRIO];
 };
 
 struct dummy_rq {
