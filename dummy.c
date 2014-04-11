@@ -154,7 +154,7 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 		resched_task(curr);
 	}
 	
-	for (i = 0; i < NBR_DUMMY_PRIO; i++) {
+	for (i = 1; i < NBR_DUMMY_PRIO; i++) {
 		/*struct list_head *temp;
 		INIT_LIST_HEAD(temp);*/
 		struct sched_dummy_entity *dummy;
