@@ -77,7 +77,7 @@ static inline void _dequeue_task_dummy(struct task_struct *p, struct rq *rq)
 
 static void enqueue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 {
-	printk(KERN_CRIT "enqueued: %d\n",p->pid);
+	printk(KERN_CRIT "enqueue: %d, priority: %d\n",p->pid,p->prio);
 	_enqueue_task_dummy(rq, p);	
 	if (p->dummy_se.time_slice >= get_timeslice()) {
 		p->dummy_se.time_slice = 0;
@@ -87,6 +87,7 @@ static void enqueue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 
 static void dequeue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 {
+	printk(KERN_CRIT "dequeue: %d, priority: %d\n",p->pid,p->prio);
 	_dequeue_task_dummy(p, rq);	
 	dec_nr_running(rq);
 }
@@ -147,6 +148,7 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 
 	if (curr->dummy_se.time_slice >= get_timeslice()) {
 		curr->prio = curr->static_prio;
+		dummy->aging = 0;
 		dequeue_task_dummy(rq, curr, queued);
 		enqueue_task_dummy(rq, curr, queued);
 		resched_task(curr);
@@ -159,8 +161,9 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 		struct sched_dummy_entity *dummy_temp;
 		list_for_each_entry_safe(dummy, dummy_temp, rq->dummy.array.queues + i, run_list) {
 			dummy->aging++;
-			if(dummy->aging >= get_age_threshold() && dummy_task_of(dummy)->prio > DUMMY_PRIO_UPPER_BOUND - 5) {
+			if(dummy->aging >= get_age_threshold() && dummy_task_of(dummy)->prio > DUMMY_PRIO_UPPER_BOUND - 5 + 1) {
 				printk(KERN_CRIT "process %d aged\n",dummy_task_of(dummy)->pid);
+				dummy->aging = 0;
 				dummy_task_of(dummy)->prio = dummy_task_of(dummy)->prio-1;
 				dequeue_task_dummy(rq, dummy_task_of(dummy), queued);
  				enqueue_task_dummy(rq, dummy_task_of(dummy), queued);
