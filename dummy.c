@@ -90,7 +90,6 @@ static void dequeue_task_dummy(struct rq *rq, struct task_struct *p, int flags)
 	_dequeue_task_dummy(p, rq);	
 	if (p->dummy_se.aging >= get_age_threshold()) {
 		p->dummy_se.aging = 0;
-		p->prio = p->static_prio;
 	}
 	dec_nr_running(rq);
 }
@@ -160,6 +159,7 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 		list_for_each_entry_safe(dummy, dummy_temp, rq->dummy.array.queues + i, run_list) {
 			dummy->aging++;
 			if(dummy->aging >= get_age_threshold() && dummy_task_of(dummy)->prio > DUMMY_PRIO_UPPER_BOUND - 5) {
+				printk(KERN_CRIT "process %d aged\n",p->pid);
 				dummy_task_of(dummy)->prio = dummy_task_of(dummy)->prio-1;
 				dequeue_task_dummy(rq, dummy_task_of(dummy), queued);
  				enqueue_task_dummy(rq, dummy_task_of(dummy), queued);
