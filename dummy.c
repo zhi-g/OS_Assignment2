@@ -146,14 +146,14 @@ static void task_tick_dummy(struct rq *rq, struct task_struct *curr, int queued)
 	int i;
 	for (i = 0; i < NBR_DUMMY_PRIO; i++) {
 		struct list_head *temp;
-		INIT_LIST_HEAD(&temp);
+		INIT_LIST_HEAD(temp);
 		
 		list_for_each_safe(dummy_rq->array.queues, temp, &curr->dummy_se.run_list) {
 			if(run_list->aging >= get_age_threshold()) {
 				run_list->prio = run_list->prio-1;
-				dequeue();
-				enqueue();
-				resched_task();
+				dequeue_task_dummy(rq, curr, queued);
+				enqueue_task_dummy(rq, curr, queued);
+				resched_task(curr);
 			}
 		}
 	}
