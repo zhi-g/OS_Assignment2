@@ -25,6 +25,10 @@
 
 #define DEBUG_PRINT //
 
+#define DIRECTORY_RECORD_SIZE 32
+#define MIN_NB_OF_SECTORS 65525
+#define MAX_CLUSTER_SIZE 32768
+
 // A kitchen sink for all important data about filesystem
 struct vfat_data {
 	const char	*dev;
@@ -34,6 +38,7 @@ struct vfat_data {
 	size_t fat_begin; // offset of the FAT (in sectors)
 	size_t clusters_begin; // offset of the clusters (in sectors)
 	size_t fat_size; // size of FAT (in bytes)
+	size_t clusters_size; // size of a cluster (in bytes)
 
 	uint32_t* fat_content;
 };
@@ -45,7 +50,9 @@ uid_t mount_uid;
 gid_t mount_gid;
 time_t mount_time;
 
-// Print the content in hexadecimal form for debugging
+/*
+ * Print the content in hexadecimal form for debugging
+ */
 static void hex_print(const void* content, size_t size) {
 	if (content) {
 		size_t offset;
@@ -60,14 +67,17 @@ static void hex_print(const void* content, size_t size) {
 }
 
 /*
- * Follows a chain in the FAT starting at offset calling the callback function for each entry.
+ * Follows a chain in the FAT starting at the specified offset.
+ * Also calls the callback function for each entry.
  */
-static void follow_fat_chain(size_t offset, void (*callback)(size_t fat_offset, uint32_t fat_entry)) {
+static void follow_fat_chain(size_t offset, void (*callback)(size_t cluster_number)) {
 	if (vfat_info.fat_content && callback) {
 		uint32_t entry;
 		do {
-			entry = vfat_info.fat_content[offset++] & 0xFFFFFFF; // Mask the 4 upper bits
-			callback(offset, entry);
+			entry = vfat_info.fat_content[offset] & 0xFFFFFFF; // Mask the 4 upper bits
+			printf("Callback for cluster #%08X\n", offset);
+			callback(offset);
+			offset++;
 		} while (entry < 0xFFFFFF8);
 	}
 }
@@ -79,6 +89,52 @@ static inline size_t sectors_to_bytes(size_t number_of_sectors) {
 	return number_of_sectors * vfat_info.boot.bytes_per_sector;
 }
 
+/*
+ * Read one cluster to the specified buffer
+ */
+static void read_cluster(void* buffer, size_t cluster_number) {
+	if (buffer) { // TODO : Add check for sector alignment ?
+		size_t offset = vfat_info.clusters_begin + (cluster_number - 2) * vfat_info.clusters_size; // The first data cluster is cluster #2
+
+		lseek(vfat_info.fs, offset, SEEK_SET);
+		read(vfat_info.fs, buffer, vfat_info.clusters_size);
+	}
+}
+
+/*
+ * Read the directory starting at the specified cluster number
+ */
+static void read_directory(size_t cluster_number) {
+	uint8_t cluster[vfat_info.clusters_size];
+	read_cluster(cluster, cluster_number);
+
+	size_t offset = 0;
+	struct fat32_direntry entry;
+	do {
+		// TODO : Handle unused directory ? (first byte is 0xE5)
+		memcpy(&entry, &cluster[offset], sizeof(entry));
+
+		// If it's a long file name, we're ignoring it for now
+		if ((entry.attr & 0xF) != VFAT_ATTR_LFN) {
+			if ((entry.attr & VFAT_ATTR_DIR) == VFAT_ATTR_DIR) {
+				printf("D ");
+			} else if ((entry.attr & VFAT_ATTR_VOLUME_ID) == VFAT_ATTR_VOLUME_ID) {
+				printf("V ");
+			} else {
+				printf("F ");
+			}
+			puts(entry.nameext);
+		}
+
+		//hex_print(&cluster[offset], DIRECTORY_RECORD_SIZE);
+		offset += DIRECTORY_RECORD_SIZE;
+	} while(cluster[offset] != 0); // 
+}
+
+/*
+ * Checks the Volume ID and make sure it's a FAT32 partition
+ * Be careful since this function ends the program if the boot sector is invalid
+ */
 static void check_boot_validity(const struct fat_boot* data) {
 
 	switch (data->bytes_per_sector) {
@@ -105,7 +161,7 @@ static void check_boot_validity(const struct fat_boot* data) {
 			errx(1, "Invalid number of sectors per cluster. Exiting...");
 	}
 
-	if (data->bytes_per_sector * data->sectors_per_cluster >= 32768) {
+	if (data->bytes_per_sector * data->sectors_per_cluster >= MAX_CLUSTER_SIZE) {
 		errx(1, "Invalid cluster size. Exiting...");
 	}
 
@@ -133,7 +189,7 @@ static void check_boot_validity(const struct fat_boot* data) {
 	unsigned long dataSec = data->total_sectors - (data->reserved_sectors + (data->fat32.sectors_per_fat * data->fat_count));
 	unsigned long count_clusters = dataSec / data->sectors_per_cluster;
 	
-	if (count_clusters < 65525) {
+	if (count_clusters < MIN_NB_OF_SECTORS) {
 		errx(1, "Invalid number of sectors for FAT32. Exiting...");
 	}
 }
@@ -143,10 +199,6 @@ static void check_boot_validity(const struct fat_boot* data) {
  */
 static void cleanup(void) {
 	free(vfat_info.fat_content);
-}
-
-static void print_test(size_t fat_offset, uint32_t entry) {
-	printf("%08X => %07X\n", fat_offset, entry);
 }
 
 static void
@@ -171,7 +223,8 @@ vfat_init(const char *dev)
 	// Compute some useful values
 	vfat_info.fat_begin = sectors_to_bytes(vfat_info.boot.reserved_sectors);
 	vfat_info.fat_size = sectors_to_bytes(vfat_info.boot.fat32.sectors_per_fat);
-	vfat_info.clusters_begin = sectors_to_bytes(vfat_info.fat_begin + vfat_info.boot.fat32.sectors_per_fat * vfat_info.boot.fat_count);
+	vfat_info.clusters_begin = sectors_to_bytes(vfat_info.boot.reserved_sectors + vfat_info.boot.fat32.sectors_per_fat * vfat_info.boot.fat_count);
+	vfat_info.clusters_size = sectors_to_bytes(vfat_info.boot.sectors_per_cluster);
 
 	// Read the FAT
 	vfat_info.fat_content = calloc(vfat_info.fat_size, sizeof(uint32_t));
@@ -186,7 +239,7 @@ vfat_init(const char *dev)
 	//hex_print(vfat_info.fat_content, vfat_info.fat_size);
 
 	puts("Follow the FAT chain of the root cluster");
-	follow_fat_chain(vfat_info.boot.fat32.root_cluster, print_test);
+	follow_fat_chain(vfat_info.boot.fat32.root_cluster, read_directory);
 
 	// Free Willy !
 	cleanup();
