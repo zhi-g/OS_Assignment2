@@ -136,8 +136,8 @@ vfat_init(const char *dev)
 	read(vfat_info.fs, &vfat_info.boot, sizeof(vfat_info.boot));
 	check_boot_validity(&vfat_info.boot);
 	vfat_info.fat_begin = data->reserved_sectors; 
-	vfat_info.clusters_begin = vfat_info.fat_begin + data->fat32.sectors_per_fat*data->fat_count;
-	vfat_info.root_dir_begin= data->fat32.root_cluster * data->fat32.sectors_per_cluster;
+	vfat_info.clusters_begin = (vfat_info.fat_begin + data->fat32.sectors_per_fat*data->fat_count)*data->bytes_per_sector;
+	vfat_info.root_dir_begin= (data->fat32.root_cluster * data->fat32.sectors_per_cluster)*data->bytes_per_sector;
 
 
 
@@ -146,6 +146,7 @@ vfat_init(const char *dev)
 /* XXX add your code here */
 
 static int
+
 vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fillerdata)
 {
 	struct stat st; // we can reuse same stat entry over and over again
