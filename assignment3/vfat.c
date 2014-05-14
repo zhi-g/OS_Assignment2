@@ -107,6 +107,7 @@ static void check_boot_validity(const struct fat_boot* data) {
 		errx(1, "Invalid FAT32 boot sector. Exiting...");
 	}
 
+	// Make sure the reserved space of the boot sector is empty (as it should be for a valid FAT32 partition)
 	size_t offset;
 	for (offset = 0; offset < sizeof(data->fat32.reserved2); ++offset) {
 		if (data->fat32.reserved2[offset] != 0) {
@@ -114,13 +115,20 @@ static void check_boot_validity(const struct fat_boot* data) {
 		}
 	}
 	
-	// Vérification de la vadilité du nombre de clusters pour un FAT32;
+	// Checking if the number of clusters is valid
 	unsigned long dataSec = data->total_sectors - (data->reserved_sectors + (data->fat32.sectors_per_fat * data->fat_count));
 	unsigned long count_clusters = dataSec / data->sectors_per_cluster;
 	
 	if (count_clusters < 65525) {
 		errx(1, "Invalid number of sectors for FAT32. Exiting...");
 	}
+}
+
+/*
+ * Free ressources
+ */
+static void cleanup(void) {
+	free(vfat_info.fat_content);
 }
 
 static void
@@ -147,16 +155,20 @@ vfat_init(const char *dev)
 	vfat_info.fat_size = sectors_to_bytes(vfat_info.boot.fat32.sectors_per_fat);
 	vfat_info.clusters_begin = sectors_to_bytes(vfat_info.fat_begin + vfat_info.boot.fat32.sectors_per_fat * vfat_info.boot.fat_count);
 
-	puts("Dump of FAT :");
-	
+	// Read the FAT
 	vfat_info.fat_content = calloc(vfat_info.fat_size, sizeof(uint32_t));
-	if (vfat_info.fat_content) {
-		lseek(vfat_info.fs, vfat_info.fat_begin, SEEK_SET);
-		read(vfat_info.fs, vfat_info.fat_content, vfat_info.fat_size);
-		hex_print(vfat_info.fat_content, vfat_info.fat_size);
-		free(vfat_info.fat_content);
+	if (vfat_info.fat_content == NULL) {
+		errx(1, "Could't read the FAT. Exiting...");
 	}
 
+	lseek(vfat_info.fs, vfat_info.fat_begin, SEEK_SET);
+	read(vfat_info.fs, vfat_info.fat_content, vfat_info.fat_size);
+	
+	// Print the FAT for debugging matters
+	hex_print(vfat_info.fat_content, vfat_info.fat_size);
+
+	// Free Willy !
+	cleanup();
 }
 
 /* XXX add your code here */
@@ -174,10 +186,6 @@ vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fillerdata)
 	st.st_uid = mount_uid;
 	st.st_gid = mount_gid;
 	st.st_nlink = 1;
-	
-	
-	
-	
 	
 	/* XXX add your code here */
 }
