@@ -109,9 +109,12 @@ static void check_boot_validity(const struct fat_boot* data) {
 	// Vérification de la vadilité du nombre de clusters pour un FAT32;
 	unsigned long dataSec = data->total_sectors - (data->reserved_sectors + (data->fat32.sectors_per_fat * data->fat_count));
 	unsigned long count_clusters = dataSec / data->sectors_per_cluster;
+	
 	if (count_clusters < 65525) {
 		errx(1, "Invalid number of sectors for FAT32. Exiting...");
 	}
+	vfat_info.fat_begin = ++data->reserved_sectors; 
+	vfat_info.clusters_begin = vfat_info.fat_begin + data->fat32.sectors_per_fat*data->fat_count;
 	
 }
 
