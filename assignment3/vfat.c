@@ -34,6 +34,7 @@ struct vfat_data {
 	unsigned long clusters_begin;
 	uint8_t sectors_per_cluster;
 	unsigned long root_dir_begin;
+	size_t fat_size; // size of FAT in bytes
 	/* XXX add your code here */
 };
 
@@ -113,8 +114,6 @@ static void check_boot_validity(const struct fat_boot* data) {
 	if (count_clusters < 65525) {
 		errx(1, "Invalid number of sectors for FAT32. Exiting...");
 	}
-	
-	
 }
 
 static void
@@ -135,11 +134,20 @@ vfat_init(const char *dev)
 	// Read the boot sector
 	read(vfat_info.fs, &vfat_info.boot, sizeof(vfat_info.boot));
 	check_boot_validity(&vfat_info.boot);
-	vfat_info.fat_begin = data->reserved_sectors; 
-	vfat_info.clusters_begin = (vfat_info.fat_begin + data->fat32.sectors_per_fat*data->fat_count)*data->bytes_per_sector;
-	vfat_info.root_dir_begin= (data->fat32.root_cluster * data->fat32.sectors_per_cluster)*data->bytes_per_sector;
 
+	vfat_info.fat_begin = vfat_info.boot.reserved_sectors * vfat_info.boot.bytes_per_sector;
+	vfat_info.clusters_begin = (vfat_info.fat_begin + vfat_info.boot.fat32.sectors_per_fat * vfat_info.boot.fat_count) * vfat_info.boot.bytes_per_sector;
+	vfat_info.fat_size = vfat_info.boot.fat32.sectors_per_fat * vfat_info.boot.bytes_per_sector;
 
+	puts("Dump of FAT :");
+	
+	uint32_t *fat_content = calloc(vfat_info.fat_size, sizeof(uint32_t));
+	if (fat_content) {
+		lseek(vfat_info.fs, vfat_info.fat_begin, SEEK_SET);
+		read(vfat_info.fs, fat_content, vfat_info.fat_size);
+		hex_print(fat_content, vfat_info.fat_size);
+		free(fat_content);
+	}
 
 }
 
