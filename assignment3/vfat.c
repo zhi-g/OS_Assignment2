@@ -30,12 +30,12 @@ struct vfat_data {
 	const char	*dev;
 	int		fs;
 	struct fat_boot boot;
-	unsigned long fat_begin;
-	unsigned long clusters_begin;
-	uint8_t sectors_per_cluster;
-	unsigned long root_dir_begin;
-	size_t fat_size; // size of FAT in bytes
-	/* XXX add your code here */
+
+	size_t fat_begin; // offset of the FAT (in sectors)
+	size_t clusters_begin; // offset of the clusters (in sectors)
+	size_t fat_size; // size of FAT (in bytes)
+
+	uint32_t* fat_content;
 };
 
 struct vfat_data vfat_info;
@@ -46,16 +46,23 @@ gid_t mount_gid;
 time_t mount_time;
 
 // Print the content in hexadecimal form for debugging
-static void hex_print(const uint8_t* content, size_t size)
+static void hex_print(const void* content, size_t size)
 {
 	size_t offset;
 
 	for (offset = 0; offset < size; ++offset) {
 		if (offset % 16 == 0 && offset != 0)
 			puts("");
-		printf("%02x ", content[offset]);
+		printf("%02x ", ((uint8_t*)content)[offset]);
 	}
 	printf("\n");
+}
+
+/*
+ * Helper function to convert a number of sectors to a number of bytes
+ */
+static inline size_t sectors_to_bytes(size_t number_of_sectors) {
+	return number_of_sectors * vfat_info.boot.bytes_per_sector;
 }
 
 static void check_boot_validity(const struct fat_boot* data) {
@@ -135,18 +142,19 @@ vfat_init(const char *dev)
 	read(vfat_info.fs, &vfat_info.boot, sizeof(vfat_info.boot));
 	check_boot_validity(&vfat_info.boot);
 
-	vfat_info.fat_begin = vfat_info.boot.reserved_sectors * vfat_info.boot.bytes_per_sector;
-	vfat_info.clusters_begin = (vfat_info.fat_begin + vfat_info.boot.fat32.sectors_per_fat * vfat_info.boot.fat_count) * vfat_info.boot.bytes_per_sector;
-	vfat_info.fat_size = vfat_info.boot.fat32.sectors_per_fat * vfat_info.boot.bytes_per_sector;
+	// Compute some useful values
+	vfat_info.fat_begin = sectors_to_bytes(vfat_info.boot.reserved_sectors);
+	vfat_info.fat_size = sectors_to_bytes(vfat_info.boot.fat32.sectors_per_fat);
+	vfat_info.clusters_begin = sectors_to_bytes(vfat_info.fat_begin + vfat_info.boot.fat32.sectors_per_fat * vfat_info.boot.fat_count);
 
 	puts("Dump of FAT :");
 	
-	uint32_t *fat_content = calloc(vfat_info.fat_size, sizeof(uint32_t));
-	if (fat_content) {
+	vfat_info.fat_content = calloc(vfat_info.fat_size, sizeof(uint32_t));
+	if (vfat_info.fat_content) {
 		lseek(vfat_info.fs, vfat_info.fat_begin, SEEK_SET);
-		read(vfat_info.fs, fat_content, vfat_info.fat_size);
-		hex_print(fat_content, vfat_info.fat_size);
-		free(fat_content);
+		read(vfat_info.fs, vfat_info.fat_content, vfat_info.fat_size);
+		hex_print(vfat_info.fat_content, vfat_info.fat_size);
+		free(vfat_info.fat_content);
 	}
 
 }
