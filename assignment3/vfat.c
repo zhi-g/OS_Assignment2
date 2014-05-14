@@ -38,7 +38,7 @@ struct vfat_data {
 	uint32_t* fat_content;
 };
 
-struct vfat_data vfat_info;
+struct vfat_data vfat_info = { 0 };
 iconv_t iconv_utf16;
 
 uid_t mount_uid;
@@ -46,16 +46,30 @@ gid_t mount_gid;
 time_t mount_time;
 
 // Print the content in hexadecimal form for debugging
-static void hex_print(const void* content, size_t size)
-{
-	size_t offset;
+static void hex_print(const void* content, size_t size) {
+	if (content) {
+		size_t offset;
 
-	for (offset = 0; offset < size; ++offset) {
-		if (offset % 16 == 0 && offset != 0)
-			puts("");
-		printf("%02x ", ((uint8_t*)content)[offset]);
+		for (offset = 0; offset < size; ++offset) {
+			if (offset % 16 == 0 && offset != 0)
+				puts("");
+			printf("%02X ", ((uint8_t*)content)[offset]);
+		}
+		printf("\n");
 	}
-	printf("\n");
+}
+
+/*
+ * Follows a chain in the FAT starting at offset calling the callback function for each entry.
+ */
+static void follow_fat_chain(size_t offset, void (*callback)(size_t fat_offset, uint32_t fat_entry)) {
+	if (vfat_info.fat_content && callback) {
+		uint32_t entry;
+		do {
+			entry = vfat_info.fat_content[offset++] & 0xFFFFFFF; // Mask the 4 upper bits
+			callback(offset, entry);
+		} while (entry < 0xFFFFFF8);
+	}
 }
 
 /*
@@ -131,6 +145,10 @@ static void cleanup(void) {
 	free(vfat_info.fat_content);
 }
 
+static void print_test(size_t fat_offset, uint32_t entry) {
+	printf("%08X => %07X\n", fat_offset, entry);
+}
+
 static void
 vfat_init(const char *dev)
 {
@@ -165,7 +183,10 @@ vfat_init(const char *dev)
 	read(vfat_info.fs, vfat_info.fat_content, vfat_info.fat_size);
 	
 	// Print the FAT for debugging matters
-	hex_print(vfat_info.fat_content, vfat_info.fat_size);
+	//hex_print(vfat_info.fat_content, vfat_info.fat_size);
+
+	puts("Follow the FAT chain of the root cluster");
+	follow_fat_chain(vfat_info.boot.fat32.root_cluster, print_test);
 
 	// Free Willy !
 	cleanup();
