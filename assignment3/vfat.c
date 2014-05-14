@@ -23,14 +23,16 @@
 
 #include "vfat.h"
 
+#define DEBUG 1
 #define DEBUG_PRINT //
 
-#define MBR_SIZE 512
+#define BOOT_SECTOR_SIZE 512
 
 // A kitchen sink for all important data about filesystem
 struct vfat_data {
 	const char	*dev;
 	int		fs;
+	struct fat_boot boot;
 	/* XXX add your code here */
 };
 
@@ -41,16 +43,29 @@ uid_t mount_uid;
 gid_t mount_gid;
 time_t mount_time;
 
-static void hex_print(const char* str, size_t size)
+// Print the content in hexadecimal form for debugging
+static void hex_print(const uint8_t* content, size_t size)
 {
 	size_t offset;
 
 	for (offset = 0; offset < size; ++offset) {
 		if (offset % 16 == 0 && offset != 0)
 			puts("");
-		printf("%.2x ", str[offset] & 0xFF);
+		printf("%02x ", content[offset]);
 	}
 	printf("\n");
+}
+
+static void check_boot_validity(const struct fat_boot* data) {
+	if (data->bytes_per_sector != 512 || // We assume it should be 512 bytes
+	    data->fat_count != 2 ||
+	    data->root_max_entries != 0 ||
+	    data->total_sectors_small != 0 ||
+	    data->sectors_per_fat_small != 0 ||
+	    data->fat32.signature != 0xAA55)
+	{
+		errx(1, "Invalid FAT32 boot sector. Exiting...");
+	}
 }
 
 static void
@@ -68,9 +83,9 @@ vfat_init(const char *dev)
 	if (vfat_info.fs < 0)
 		err(1, "open(%s)", dev);
 
-	char mbr_sector[MBR_SIZE];
-	read(vfat_info.fs, mbr_sector, MBR_SIZE);
-	hex_print(mbr_sector, sizeof(mbr_sector));
+	// Read the boot sector
+	read(vfat_info.fs, &vfat_info.boot, BOOT_SECTOR_SIZE);
+	check_boot_validity(&vfat_info.boot);
 
 }
 

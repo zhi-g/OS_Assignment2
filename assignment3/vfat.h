@@ -18,6 +18,8 @@ struct fat_boot_fat32 {
 	/*67*/	uint32_t	serial;
 	/*71*/	char		label[11];
 	/*82*/	char		type[8];
+	/*90*/  uint8_t unused[420];
+	/*510*/ uint16_t signature;
 } __attribute__ ((__packed__));
 
 // Boot sector
