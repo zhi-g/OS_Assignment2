@@ -30,6 +30,10 @@ struct vfat_data {
 	const char	*dev;
 	int		fs;
 	struct fat_boot boot;
+	unsigned long fat_begin;
+	unsigned long clusters_begin;
+	uint8_t sectors_per_cluster;
+	unsigned long root_dir_begin;
 	/* XXX add your code here */
 };
 
@@ -129,6 +133,8 @@ vfat_init(const char *dev)
 	// Read the boot sector
 	read(vfat_info.fs, &vfat_info.boot, sizeof(vfat_info.boot));
 	check_boot_validity(&vfat_info.boot);
+
+
 
 }
 
