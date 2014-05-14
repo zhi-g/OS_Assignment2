@@ -55,30 +55,58 @@ static void hex_print(const uint8_t* content, size_t size)
 
 static void check_boot_validity(const struct fat_boot* data) {
 
-	int dataSec;
-	int count_clusters;
+	switch (data->bytes_per_sector) {
+		case 512:
+		case 1024:
+		case 2048:
+		case 4096:
+			break; // Valid value
+		default:
+			errx(1, "Invalid number of bytes per sector. Exiting...");
+	}
 
+	switch (data->sectors_per_cluster) {
+		case 1:
+		case 2:
+		case 4:
+		case 8:
+		case 16:
+		case 32:
+		case 64:
+		case 128:
+			break; // Valid value
+		default:
+			errx(1, "Invalid number of sectors per cluster. Exiting...");
+	}
 
+	if (data->bytes_per_sector * data->sectors_per_cluster >= 32768) {
+		errx(1, "Invalid cluster size. Exiting...");
+	}
 
-	if (data->bytes_per_sector != 512 || 
-	// We assume it should be 512 bytes //Pourquoi? les
-	//secteurs ne sont pas censés avoir une taille de 512 (flag utilisé pour indiqué la taille
-	//disponible à 0x0B
-	    data->fat_count != 2 || // Encore une fois pourquoi enforce cette valeur?
+	// Checking various fields of the boot sector
+	if (
+			data->fat_count != 2 ||
 	    data->root_max_entries != 0 ||
 	    data->total_sectors_small != 0 ||
 	    data->sectors_per_fat_small != 0 ||
+	    data->fat32.version != 0 ||
 	    data->fat32.signature != 0xAA55)
 	{
 		errx(1, "Invalid FAT32 boot sector. Exiting...");
 	}
+
+	size_t offset;
+	for (offset = 0; offset < sizeof(data->fat32.reserved2); ++offset) {
+		if (data->fat32.reserved2[offset] != 0) {
+			errx(1, "Reserved space of boot sector is not zero. Exiting...");
+		}
+	}
 	
 	// Vérification de la vadilité du nombre de clusters pour un FAT32;
-	dataSec = data->total_sectors – (data->reserved_sectors + (data->fat32.sectors_per_fat * data->fat_count) );
-	count_clusters = = dataSec / sectors_per_cluster;
-	if(count_clusters < 65525){
-	   errx(1, "Invalid number of sectors for FAT32... Exiting...");
-	
+	unsigned long dataSec = data->total_sectors - (data->reserved_sectors + (data->fat32.sectors_per_fat * data->fat_count));
+	unsigned long count_clusters = dataSec / data->sectors_per_cluster;
+	if (count_clusters < 65525) {
+		errx(1, "Invalid number of sectors for FAT32. Exiting...");
 	}
 	
 }
