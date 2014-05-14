@@ -113,8 +113,7 @@ static void check_boot_validity(const struct fat_boot* data) {
 	if (count_clusters < 65525) {
 		errx(1, "Invalid number of sectors for FAT32. Exiting...");
 	}
-	vfat_info.fat_begin = ++data->reserved_sectors; 
-	vfat_info.clusters_begin = vfat_info.fat_begin + data->fat32.sectors_per_fat*data->fat_count;
+	
 	
 }
 
@@ -136,6 +135,9 @@ vfat_init(const char *dev)
 	// Read the boot sector
 	read(vfat_info.fs, &vfat_info.boot, sizeof(vfat_info.boot));
 	check_boot_validity(&vfat_info.boot);
+	vfat_info.fat_begin = data->reserved_sectors; 
+	vfat_info.clusters_begin = vfat_info.fat_begin + data->fat32.sectors_per_fat*data->fat_count;
+	vfat_info.root_dir_begin= data->fat32.root_cluster * data->fat32.sectors_per_cluster;
 
 
 
@@ -155,7 +157,11 @@ vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fillerdata)
 	st.st_uid = mount_uid;
 	st.st_gid = mount_gid;
 	st.st_nlink = 1;
-
+	
+	
+	
+	
+	
 	/* XXX add your code here */
 }
 
