@@ -23,10 +23,7 @@
 
 #include "vfat.h"
 
-#define DEBUG 1
 #define DEBUG_PRINT //
-
-#define BOOT_SECTOR_SIZE 512
 
 // A kitchen sink for all important data about filesystem
 struct vfat_data {
@@ -84,7 +81,7 @@ vfat_init(const char *dev)
 		err(1, "open(%s)", dev);
 
 	// Read the boot sector
-	read(vfat_info.fs, &vfat_info.boot, BOOT_SECTOR_SIZE);
+	read(vfat_info.fs, &vfat_info.boot, sizeof(vfat_info.boot));
 	check_boot_validity(&vfat_info.boot);
 
 }
