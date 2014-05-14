@@ -54,8 +54,17 @@ static void hex_print(const uint8_t* content, size_t size)
 }
 
 static void check_boot_validity(const struct fat_boot* data) {
-	if (data->bytes_per_sector != 512 || // We assume it should be 512 bytes
-	    data->fat_count != 2 ||
+
+	int dataSec;
+	int count_clusters;
+
+
+
+	if (data->bytes_per_sector != 512 || 
+	// We assume it should be 512 bytes //Pourquoi? les
+	//secteurs ne sont pas censés avoir une taille de 512 (flag utilisé pour indiqué la taille
+	//disponible à 0x0B
+	    data->fat_count != 2 || // Encore une fois pourquoi enforce cette valeur?
 	    data->root_max_entries != 0 ||
 	    data->total_sectors_small != 0 ||
 	    data->sectors_per_fat_small != 0 ||
@@ -63,6 +72,15 @@ static void check_boot_validity(const struct fat_boot* data) {
 	{
 		errx(1, "Invalid FAT32 boot sector. Exiting...");
 	}
+	
+	// Vérification de la vadilité du nombre de clusters pour un FAT32;
+	dataSec = data->total_sectors – (data->reserved_sectors + (data->fat32.sectors_per_fat * data->fat_count) );
+	count_clusters = = dataSec / sectors_per_cluster;
+	if(count_clusters < 65525){
+	   errx(1, "Invalid number of sectors for FAT32... Exiting...");
+	
+	}
+	
 }
 
 static void
