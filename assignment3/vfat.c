@@ -69,16 +69,22 @@ static void hex_print(const void* content, size_t size) {
 /*
  * Follows a chain in the FAT starting at the specified offset.
  * Also calls the callback function for each entry.
+ * The size argument is used when reading files. Should be 0 for directories.
+ *
+ * The arguments of the callback function are :
+ * - The cluster to read
+ * - How many bytes to read from that cluster
  */
-static void follow_fat_chain(size_t offset, void (*callback)(size_t cluster_number)) {
+static void follow_fat_chain(size_t offset, void (*callback)(size_t cluster_number, size_t n), size_t size) {
 	if (vfat_info.fat_content && callback) {
 		uint32_t entry;
+
 		do {
 			entry = vfat_info.fat_content[offset] & 0xFFFFFFF; // Mask the 4 upper bits
-			printf("Callback for cluster #%08X\n", offset);
-			callback(offset);
-			offset++;
-		} while (entry < 0xFFFFFF8);
+			printf("Callback for cluster #%zu (next is #%zu)\n", offset, entry);
+			callback(offset, vfat_info.clusters_size);
+			offset = entry;
+		} while (offset < 0xFFFFFF8); // Any value greater or equal to 0xFFFFFF8 means end of chain
 	}
 }
 
@@ -128,7 +134,7 @@ static void trim_filename(char* output, char* nameext) {
 /*
  * Read the directory entries located at the specified cluster number
  */
-static void read_directory_entries(size_t cluster_number) {
+static void read_directory_cluster(size_t cluster_number) {
 	uint8_t cluster[vfat_info.clusters_size];
 	read_cluster(cluster, cluster_number);
 
@@ -170,7 +176,28 @@ static void read_directory_entries(size_t cluster_number) {
  * Helper function to read the whole directory starting at cluster number
  */
 static inline void read_directory(size_t cluster_number) {
-	follow_fat_chain(cluster_number, read_directory_entries);
+	follow_fat_chain(cluster_number, read_directory_cluster, 0);
+}
+
+/*
+ * Read the first n bytes of the specified cluster.
+ */
+static void read_file_cluster(size_t cluster_number, size_t n) {
+	assert(n <= vfat_info.clusters_size);
+
+	uint8_t cluster[vfat_info.clusters_size];
+	read_cluster(cluster, cluster_number);
+
+	hex_print(cluster, n);
+}
+
+/*
+ * Read the file
+ */
+static void read_file(size_t cluster_number, size_t size) {
+	assert(size > 0);
+
+	follow_fat_chain(cluster_number, read_file_cluster, size);
 }
 
 /*
@@ -203,7 +230,7 @@ static void check_boot_validity(const struct fat_boot* data) {
 			errx(1, "Invalid number of sectors per cluster. Exiting...");
 	}
 
-	if (data->bytes_per_sector * data->sectors_per_cluster >= MAX_CLUSTER_SIZE) {
+	if (sectors_to_bytes(data->sectors_per_cluster) >= MAX_CLUSTER_SIZE) {
 		errx(1, "Invalid cluster size. Exiting...");
 	}
 
@@ -284,6 +311,9 @@ vfat_init(const char *dev)
 	puts(" Reading the root directory ");
 	puts("=============================");
 	read_directory(vfat_info.boot.fat32.root_cluster);
+
+	printf("%u\n", vfat_info.clusters_size);
+	read_file(259, 10);
 
 	// Free Willy !
 	cleanup();

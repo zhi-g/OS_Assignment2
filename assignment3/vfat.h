@@ -66,6 +66,7 @@ struct fat32_direntry {
 #define VFAT_ATTR_DIR	0x10
 #define VFAT_ATTR_LFN	0xf
 #define VFAT_ATTR_VOLUME_ID	0x08
+#define VFAT_ATTR_HIDDEN 0x10
 #define VFAT_ATTR_INVAL	(0x80|0x40|0x08)
 
 struct fat32_direntry_long {
