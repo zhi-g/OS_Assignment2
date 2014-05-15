@@ -126,9 +126,9 @@ static void trim_filename(char* output, char* nameext) {
 }
 
 /*
- * Read the directory starting at the specified cluster number
+ * Read the directory entries located at the specified cluster number
  */
-static void read_directory(size_t cluster_number) {
+static void read_directory_entries(size_t cluster_number) {
 	uint8_t cluster[vfat_info.clusters_size];
 	read_cluster(cluster, cluster_number);
 
@@ -164,6 +164,13 @@ static void read_directory(size_t cluster_number) {
 
 		offset += DIRECTORY_RECORD_SIZE;
 	} while(cluster[offset] != 0); // If the first byte is 0x00, end of directory
+}
+
+/*
+ * Helper function to read the whole directory starting at cluster number
+ */
+static inline void read_directory(size_t cluster_number) {
+	follow_fat_chain(cluster_number, read_directory_entries);
 }
 
 /*
@@ -273,8 +280,10 @@ vfat_init(const char *dev)
 	// Print the FAT for debugging matters
 	//hex_print(vfat_info.fat_content, vfat_info.fat_size);
 
-	puts("Follow the FAT chain of the root cluster");
-	follow_fat_chain(vfat_info.boot.fat32.root_cluster, read_directory);
+	puts("=============================");
+	puts(" Reading the root directory ");
+	puts("=============================");
+	read_directory(vfat_info.boot.fat32.root_cluster);
 
 	// Free Willy !
 	cleanup();
