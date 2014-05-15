@@ -90,14 +90,38 @@ static inline size_t sectors_to_bytes(size_t number_of_sectors) {
 }
 
 /*
+ * Helper function to convert a cluster number to a byte offset
+ */
+static inline size_t cluster_to_bytes(size_t cluster_number) {
+	return vfat_info.clusters_begin + (cluster_number - 2) * vfat_info.clusters_size; // The first data cluster is cluster #2
+}
+
+/*
  * Read one cluster to the specified buffer
  */
 static void read_cluster(void* buffer, size_t cluster_number) {
 	if (buffer) { // TODO : Add check for sector alignment ?
-		size_t offset = vfat_info.clusters_begin + (cluster_number - 2) * vfat_info.clusters_size; // The first data cluster is cluster #2
-
-		lseek(vfat_info.fs, offset, SEEK_SET);
+		lseek(vfat_info.fs, cluster_to_bytes(cluster_number), SEEK_SET);
 		read(vfat_info.fs, buffer, vfat_info.clusters_size);
+	}
+}
+
+/*
+ * Remove spaces from a filename (name + extension)
+ * The output array has to be able to contain at least 12 characters
+ */
+static void trim_filename(char* output, char* nameext) {
+	if (output && nameext) {
+		size_t i;
+		size_t out_offset = 0;
+
+		for (i = 0; i < 11; ++i) { // Short names are always 11 characters long
+			if (nameext[i] != 0x20) { // The character is not a space
+				output[out_offset++] = nameext[i];
+			}
+		}
+
+		output[out_offset] = '\0';
 	}
 }
 
@@ -111,24 +135,35 @@ static void read_directory(size_t cluster_number) {
 	size_t offset = 0;
 	struct fat32_direntry entry;
 	do {
-		// TODO : Handle unused directory ? (first byte is 0xE5)
-		memcpy(&entry, &cluster[offset], sizeof(entry));
 
-		// If it's a long file name, we're ignoring it for now
-		if ((entry.attr & 0xF) != VFAT_ATTR_LFN) {
-			if ((entry.attr & VFAT_ATTR_DIR) == VFAT_ATTR_DIR) {
-				printf("D ");
-			} else if ((entry.attr & VFAT_ATTR_VOLUME_ID) == VFAT_ATTR_VOLUME_ID) {
-				printf("V ");
-			} else {
-				printf("F ");
+		// If the first byte is 0xE5, the directory is unused
+		if (cluster[offset] != 0xE5) {
+			memcpy(&entry, &cluster[offset], sizeof(entry));
+
+			// If it's a long file name, we're ignoring it (for now)
+			if ((entry.attr & VFAT_ATTR_LFN) != VFAT_ATTR_LFN) {
+				if (entry.attr & VFAT_ATTR_DIR) {
+					printf("[D] ");
+				} else if (entry.attr & VFAT_ATTR_VOLUME_ID) {
+					printf("[V] ");
+				} else if (entry.attr & VFAT_ATTR_INVAL) {
+					printf("[I] ");
+				} else {
+					printf("[F] ");
+				}
+
+				char name[12]; // We need one more byte to add the \0 character so that it's a valid C string
+				trim_filename(name, entry.nameext);
+
+				uint32_t cluster_location = entry.cluster_hi << 16 | entry.cluster_lo;
+				printf("%-11s - %u Bytes (First cluster = %u, offset = %08X)\n", name, entry.size, cluster_location, cluster_to_bytes(cluster_location));
 			}
-			puts(entry.nameext);
+
+			//hex_print(&cluster[offset], DIRECTORY_RECORD_SIZE);
 		}
 
-		//hex_print(&cluster[offset], DIRECTORY_RECORD_SIZE);
 		offset += DIRECTORY_RECORD_SIZE;
-	} while(cluster[offset] != 0); // 
+	} while(cluster[offset] != 0); // If the first byte is 0x00, end of directory
 }
 
 /*
