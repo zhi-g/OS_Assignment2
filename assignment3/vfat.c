@@ -317,9 +317,11 @@ vfat_init(const char *dev)
 	puts("=============================");
 	read_directory(vfat_info.boot.fat32.root_cluster);
 
+	puts("=============================");
 	puts("Reading a file...");
-	//read_file(783, 458759);
-	read_file(259, 10);
+	puts("=============================");
+	//read_file(783, 458759); // Big file
+	read_file(259, 10); // Small file
 
 	// Free Willy !
 	cleanup();
