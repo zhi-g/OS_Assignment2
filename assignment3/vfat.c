@@ -82,7 +82,11 @@ static void follow_fat_chain(size_t offset, void (*callback)(size_t cluster_numb
 		do {
 			entry = vfat_info.fat_content[offset] & 0xFFFFFFF; // Mask the 4 upper bits
 			printf("Callback for cluster #%zu (next is #%zu)\n", offset, entry);
-			callback(offset, vfat_info.clusters_size);
+
+			size_t to_read = size < vfat_info.clusters_size ? size : vfat_info.clusters_size;
+			callback(offset, to_read);
+			size -= vfat_info.clusters_size;
+
 			offset = entry;
 		} while (offset < 0xFFFFFF8); // Any value greater or equal to 0xFFFFFF8 means end of chain
 	}
@@ -133,8 +137,9 @@ static void trim_filename(char* output, char* nameext) {
 
 /*
  * Read the directory entries located at the specified cluster number
+ * The n argument is ignored. It's used when reading files but we keep it to have the same signature.
  */
-static void read_directory_cluster(size_t cluster_number) {
+static void read_directory_cluster(size_t cluster_number, size_t n) {
 	uint8_t cluster[vfat_info.clusters_size];
 	read_cluster(cluster, cluster_number);
 
@@ -312,7 +317,8 @@ vfat_init(const char *dev)
 	puts("=============================");
 	read_directory(vfat_info.boot.fat32.root_cluster);
 
-	printf("%u\n", vfat_info.clusters_size);
+	puts("Reading a file...");
+	//read_file(783, 458759);
 	read_file(259, 10);
 
 	// Free Willy !
