@@ -83,5 +83,6 @@ struct fat32_direntry_long {
 #define VFAT_LFN_SEQ_START	0x40
 #define VFAT_LFN_SEQ_DELETED	0x80
 #define VFAT_LFN_SEQ_MASK	0x3f
+#define VFAT_MAXFILE_NAME	255;
 
 #endif
