@@ -23,7 +23,7 @@
 
 #include "vfat.h"
 
-#define DEBUG_PRINT //
+#define DEBUG_PRINT printf
 
 #define DIRECTORY_RECORD_SIZE 32
 #define MIN_NB_OF_SECTORS 65525
@@ -327,31 +327,77 @@ vfat_init(const char *dev)
 	cleanup();
 }
 
-/* XXX add your code here */
-
-static int
-
-vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fillerdata)
+static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fillerdata)
 {
 	struct stat st; // we can reuse same stat entry over and over again
-	void *buf = NULL;
-	struct vfat_direntry *e;
-	char *name;
+	//void *buf = NULL;
+	struct fat32_direntry *entry;
+	//char *name;
+	int found = 0;
 
 	memset(&st, 0, sizeof(st));
 	st.st_uid = mount_uid;
 	st.st_gid = mount_gid;
 	st.st_nlink = 1;
-	
-	/* XXX add your code here */
-}
+	st.st_mode = S_IRWXU | S_IRWXG | S_IRWXO;
 
+	// Following the FAT chain
+	uint32_t fat_entry;
+	uint32_t cluster_offset = first_cluster;
+
+	do {
+		fat_entry = vfat_info.fat_content[cluster_offset] & 0xFFFFFFF; // Mask the 4 upper bits
+		printf("Processing cluster #%zu (next is #%zu)\n", cluster_offset, fat_entry);
+
+		// Read the current cluster
+		uint8_t cluster[vfat_info.clusters_size];
+		read_cluster(cluster, cluster_offset);
+
+		// Processing the directory entries of the current cluster
+		size_t dir_offset = 0;
+		do {
+			// If the first byte is 0xE5, the directory is unused
+			if (cluster[dir_offset] != 0xE5) {
+				memcpy(entry, &cluster[dir_offset], sizeof(struct fat32_direntry));
+
+				// If it's a long file name, we're ignoring it (for now)
+				if ((entry->attr & VFAT_ATTR_LFN) != VFAT_ATTR_LFN) {
+					if (entry->attr & VFAT_ATTR_DIR) {
+						st.st_mode |= S_IFDIR;
+					} else if (entry->attr & VFAT_ATTR_VOLUME_ID) {
+						// Volume ID, ignoring...
+					} else if (entry->attr & VFAT_ATTR_INVAL) {
+						// Invalid entry, ignoring...
+					} else {
+						st.st_mode |= S_IFREG;
+					}
+
+					char name[12]; // We need one more byte to add the \0 character so that it's a valid C string
+					trim_filename(name, entry->nameext);
+
+					off_t cluster_location = entry->cluster_hi << 16 | entry->cluster_lo;
+
+					// Calling the filler
+					found = filler(fillerdata, name, &st, cluster_location);
+				}
+			}
+
+			dir_offset += DIRECTORY_RECORD_SIZE;
+		} while (cluster[dir_offset] != 0x00 && !found); // If the first byte is 0x00, end of directory
+
+
+		cluster_offset = fat_entry;
+	} while (cluster_offset < 0xFFFFFF8 && !found); // Any value greater or equal to 0xFFFFFF8 means end of chain
+
+	return 0;
+}
 
 // Used by vfat_search_entry()
 struct vfat_search_data {
 	const char	*name;
 	int		found;
 	struct stat	*st;
+	uint32_t first_cluster;
 };
 
 
@@ -366,6 +412,7 @@ vfat_search_entry(void *data, const char *name, const struct stat *st, off_t off
 
 	sd->found = 1;
 	*sd->st = *st;
+	sd->first_cluster = offs;
 
 	return (1);
 }
@@ -376,14 +423,24 @@ vfat_resolve(const char *path, struct stat *st)
 {
 	struct vfat_search_data sd;
 
-	/* XXX add your code here */
+	char* token = strtok(path, "/");
+	sd.st = st;
+	sd.first_cluster = vfat_info.boot.fat32.root_cluster;
+
+	do {
+		sd.name = token;
+		sd.found = 0;
+
+		vfat_readdir(sd.first_cluster, vfat_search_entry, &sd);
+		token = strtok(NULL, "/");
+	} while (token != NULL);
+
+	return sd.found;
 }
 
 // Get file attributes
-static int
-vfat_fuse_getattr(const char *path, struct stat *st)
+static int vfat_fuse_getattr(const char *path, struct stat *st)
 {
-	/* XXX: This is example code, replace with your own implementation */
 	DEBUG_PRINT("fuse getattr %s\n", path);
 	// No such file
 	if (strcmp(path, "/")==0) {
@@ -398,18 +455,7 @@ vfat_fuse_getattr(const char *path, struct stat *st)
 		st->st_blksize = 0; // Ignored by FUSE
 		st->st_blocks = 1;
 		return 0;
-	}
-	if (strcmp(path, "/a.txt")==0 || strcmp(path, "/b.txt")==0) {
-		st->st_dev = 0; // Ignored by FUSE
-		st->st_ino = 0; // Ignored by FUSE unless overridden
-		st->st_mode = S_IRWXU | S_IRWXG | S_IRWXO | S_IFREG;
-		st->st_nlink = 1;
-		st->st_uid = mount_uid;
-		st->st_gid = mount_gid;
-		st->st_rdev = 0;
-		st->st_size = 10;
-		st->st_blksize = 0; // Ignored by FUSE
-		st->st_blocks = 1;
+	} else if (vfat_resolve(path, st)) {
 		return 0;
 	}
 
@@ -420,11 +466,9 @@ static int
 vfat_fuse_readdir(const char *path, void *buf,
 		  fuse_fill_dir_t filler, off_t offs, struct fuse_file_info *fi)
 {
-	/* XXX: This is example code, replace with your own implementation */
 	DEBUG_PRINT("fuse readdir %s\n", path);
 	//assert(offs == 0);
-	/* XXX add your code here */
-	filler(buf, "a.txt", NULL, 0);
+
 	filler(buf, "b.txt", NULL, 0);
 	return 0;
 }
