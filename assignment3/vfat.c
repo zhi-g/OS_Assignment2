@@ -325,6 +325,31 @@ vfat_init(const char *dev)
 	read_file(259, 10); // Small file
 }
 
+// Used by vfat_search_entry()
+struct vfat_search_data {
+	const char	*name;
+	int		found;
+	struct stat	*st;
+	uint32_t first_cluster;
+};
+
+// You can use this in vfat_resolve as a filler function for vfat_readdir
+static int
+vfat_search_entry(void *data, const char *name, const struct stat *st, off_t offs)
+{
+	struct vfat_search_data *sd = data;
+
+	if (strcmp(sd->name, name) != 0)
+		return (0);
+
+	sd->found = 1;
+	if (sd->st != NULL)
+		*sd->st = *st;
+	sd->first_cluster = offs;
+
+	return (1);
+}
+
 static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fillerdata)
 {
 	struct stat st; // we can reuse same stat entry over and over again
@@ -345,7 +370,7 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 
 	do {
 		fat_entry = vfat_info.fat_content[cluster_offset] & 0xFFFFFFF; // Mask the 4 upper bits
-		printf("Processing cluster #%zu (next is #%zu)\n", cluster_offset, fat_entry);
+		DEBUG_PRINT("Processing cluster #%zu (next is #%zu)\n", cluster_offset, fat_entry);
 
 		// Read the current cluster
 		uint8_t cluster[vfat_info.clusters_size];
@@ -359,16 +384,18 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 				memcpy(&entry, &cluster[dir_offset], sizeof(struct fat32_direntry));
 
 				// If it's a long file name, we're ignoring it (for now)
-				if ((entry.attr & VFAT_ATTR_LFN) != VFAT_ATTR_LFN) {
+				// We're also ignoring Volume ID and files with invalid attributes
+				if ((entry.attr & VFAT_ATTR_LFN) != VFAT_ATTR_LFN &&
+					  (entry.attr & VFAT_ATTR_VOLUME_ID) == 0 &&
+					  (entry.attr & VFAT_ATTR_INVAL) == 0) {
+
 					if (entry.attr & VFAT_ATTR_DIR) {
-						st.st_mode |= S_IFDIR;
-					} else if (entry.attr & VFAT_ATTR_VOLUME_ID) {
-						// Volume ID, ignoring...
-					} else if (entry.attr & VFAT_ATTR_INVAL) {
-						// Invalid entry, ignoring...
+						st.st_mode |= S_IFDIR; // Directory
 					} else {
-						st.st_mode |= S_IFREG;
+						st.st_mode |= S_IFREG; // File
 					}
+
+					st.st_size = entry.size;
 
 					char name[12]; // We need one more byte to add the \0 character so that it's a valid C string
 					trim_filename(name, entry.nameext);
@@ -376,7 +403,10 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 					off_t cluster_location = entry.cluster_hi << 16 | entry.cluster_lo;
 
 					// Calling the filler
-					done = filler(fillerdata, name, &st, cluster_location);
+					if (filler == vfat_search_entry)
+						done = filler(fillerdata, name, &st, cluster_location);
+					else
+						done = filler(fillerdata, name, &st, 0);
 				}
 			}
 
@@ -390,39 +420,13 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 	return 0;
 }
 
-// Used by vfat_search_entry()
-struct vfat_search_data {
-	const char	*name;
-	int		found;
-	struct stat	*st;
-	uint32_t first_cluster;
-};
-
-
-// You can use this in vfat_resolve as a filler function for vfat_readdir
-static int
-vfat_search_entry(void *data, const char *name, const struct stat *st, off_t offs)
-{
-	struct vfat_search_data *sd = data;
-
-	if (strcmp(sd->name, name) != 0)
-		return (0);
-
-	sd->found = 1;
-	if (sd->st != NULL)
-		*sd->st = *st;
-	sd->first_cluster = offs;
-
-	return (1);
-}
-
 // Recursively find correct file/directory node given the path
-static uint32_t
+static int
 vfat_resolve(const char *path, struct stat *st)
 {
 	if (strcmp(path, "/") == 0)
 		return vfat_info.boot.fat32.root_cluster;
-	
+
 	struct vfat_search_data sd;
 
 	char* token = strtok(path, "/");
@@ -437,11 +441,11 @@ vfat_resolve(const char *path, struct stat *st)
 		token = strtok(NULL, "/");
 	} while (token != NULL);
 
-	return sd.found ? sd.first_cluster : 0;
+	return sd.found ? sd.first_cluster : -1;
 }
 
 // Get file attributes
-static int vfat_fuse_getattr(const char *path, struct stat *st)
+static int64_t vfat_fuse_getattr(const char *path, struct stat *st)
 {
 	DEBUG_PRINT("fuse getattr %s\n", path);
 	// No such file
@@ -457,7 +461,7 @@ static int vfat_fuse_getattr(const char *path, struct stat *st)
 		st->st_blksize = 0; // Ignored by FUSE
 		st->st_blocks = 1;
 		return 0;
-	} else if (vfat_resolve(path, st)) {
+	} else if (vfat_resolve(path, st) >= 0) {
 		return 0;
 	}
 
