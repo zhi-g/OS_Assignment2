@@ -38,7 +38,7 @@ struct vfat_data {
 
 	size_t fat_begin; // offset of the FAT (in sectors)
 	size_t clusters_begin; // offset of the clusters (in sectors)
-	size_t fat_size; // size of FAT (in bytes)
+	size_t fat_size; // size of the FAT (in bytes)
 	size_t clusters_size; // size of a cluster (in bytes)
 
 	uint32_t* fat_content;
@@ -64,32 +64,6 @@ static void hex_print(const void* content, size_t size) {
 			printf("%02X ", ((uint8_t*)content)[offset]);
 		}
 		printf("\n");
-	}
-}
-
-/*
- * Follows a chain in the FAT starting at the specified offset.
- * Also calls the callback function for each entry.
- * The size argument is used when reading files. Should be 0 for directories.
- *
- * The arguments of the callback function are :
- * - The cluster to read
- * - How many bytes to read from that cluster
- */
-static void follow_fat_chain(size_t offset, void (*callback)(size_t cluster_number, size_t n), size_t size) {
-	if (vfat_info.fat_content && callback) {
-		uint32_t entry;
-
-		do {
-			entry = vfat_info.fat_content[offset] & 0xFFFFFFF; // Mask the 4 upper bits
-			printf("Callback for cluster #%zu (next is #%zu)\n", offset, entry);
-
-			size_t to_read = size < vfat_info.clusters_size ? size : vfat_info.clusters_size;
-			callback(offset, to_read);
-			size -= vfat_info.clusters_size;
-
-			offset = entry;
-		} while (offset < 0xFFFFFF8); // Any value greater or equal to 0xFFFFFF8 means end of chain
 	}
 }
 
@@ -145,67 +119,6 @@ static void trim_filename(char* output, char* nameext) {
 }
 
 /*
- * Read the directory entries located at the specified cluster number
- * The n argument is ignored. It's used when reading files but we keep it to have the same signature.
- */
-static void read_directory_cluster(size_t cluster_number, size_t n) {
-	uint8_t cluster[vfat_info.clusters_size];
-	read_cluster(cluster, cluster_number);
-
-	size_t offset = 0;
-	struct fat32_direntry entry;
-	do {
-
-		// If the first byte is 0xE5, the directory is unused
-		if (cluster[offset] != 0xE5) {
-			memcpy(&entry, &cluster[offset], sizeof(entry));
-
-			// If it's a long file name, we're ignoring it (for now)
-			if ((entry.attr & VFAT_ATTR_LFN) != VFAT_ATTR_LFN) {
-				if (entry.attr & VFAT_ATTR_DIR) {
-					printf("[D] ");
-				} else if (entry.attr & VFAT_ATTR_VOLUME_ID) {
-					printf("[V] ");
-				} else if (entry.attr & VFAT_ATTR_INVAL) {
-					printf("[I] ");
-				} else {
-					printf("[F] ");
-				}
-
-				char name[12]; // We need one more byte to add the \0 character so that it's a valid C string
-				trim_filename(name, entry.nameext);
-
-				uint32_t cluster_location = entry.cluster_hi << 16 | entry.cluster_lo;
-				printf("%-11s - %u Bytes (First cluster = %u, offset = %08X)\n", name, entry.size, cluster_location, cluster_to_bytes(cluster_location));
-			}
-
-			//hex_print(&cluster[offset], DIRECTORY_RECORD_SIZE);
-		}
-
-		offset += DIRECTORY_RECORD_SIZE;
-	} while(cluster[offset] != 0); // If the first byte is 0x00, end of directory
-}
-
-/*
- * Helper function to read the whole directory starting at cluster number
- */
-static inline void read_directory(size_t cluster_number) {
-	follow_fat_chain(cluster_number, read_directory_cluster, 0);
-}
-
-/*
- * Read the first n bytes of the specified cluster.
- */
-static void read_file_cluster(size_t cluster_number, size_t n) {
-	assert(n <= vfat_info.clusters_size);
-
-	uint8_t cluster[vfat_info.clusters_size];
-	read_cluster(cluster, cluster_number);
-
-	hex_print(cluster, n);
-}
-
-/*
  * Read the file
  * Return the number of bytes read
  */
@@ -214,10 +127,15 @@ static size_t read_file(size_t first_cluster, char *buf, size_t size, off_t offs
 
 	//DEBUG_PRINT("Reading %zu bytes starting at offset %d\n", size, offset);
 
-	// Following the FAT chain
 	uint32_t fat_entry;
 	uint32_t cluster_number = first_cluster;
 	size_t read_so_far = 0;
+
+	uint8_t *cluster = calloc(vfat_info.clusters_size, sizeof(uint8_t));
+	if (!cluster) {
+		fputs("Could't allocate memory to read a cluster", stderr);
+		return 0; // 0 byte read
+	}
 
 	do {
 		fat_entry = vfat_info.fat_content[cluster_number] & 0xFFFFFFF; // Mask the 4 upper bits
@@ -227,7 +145,6 @@ static size_t read_file(size_t first_cluster, char *buf, size_t size, off_t offs
 			size_t to_read = size < vfat_info.clusters_size ? size : vfat_info.clusters_size - offset;
 			//DEBUG_PRINT("We need to read %zu bytes in cluster %zu\n", to_read, cluster_number);
 			
-			uint8_t cluster[vfat_info.clusters_size];
 			read_cluster(cluster, cluster_number);
 
 			memcpy(buf + read_so_far, cluster + offset, to_read);
@@ -243,6 +160,8 @@ static size_t read_file(size_t first_cluster, char *buf, size_t size, off_t offs
 
 		cluster_number = fat_entry;
 	} while (cluster_number < 0xFFFFFF8 && size > 0); // Any value greater or equal to 0xFFFFFF8 means end of chain
+
+	free(cluster);
 
 	return read_so_far;
 }
@@ -314,12 +233,10 @@ static void check_boot_validity(const struct fat_boot* data) {
  * Free ressources
  */
 static void cleanup(void) {
-	puts("Exiting...");
 	free(vfat_info.fat_content);
 }
 
-static void
-vfat_init(const char *dev)
+static void vfat_init(const char *dev)
 {
 	iconv_utf16 = iconv_open("utf-8", "utf-16"); // from utf-16 to utf-8
 	// These are useful so that we can setup correct permissions in the mounted directories
@@ -365,8 +282,7 @@ struct vfat_search_data {
 };
 
 // You can use this in vfat_resolve as a filler function for vfat_readdir
-static int
-vfat_search_entry(void *data, const char *name, const struct stat *st, off_t offs)
+static int vfat_search_entry(void *data, const char *name, const struct stat *st, off_t offs)
 {
 	struct vfat_search_data *sd = data;
 
@@ -419,11 +335,16 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 	uint32_t fat_entry;
 	uint32_t cluster_offset = first_cluster;
 
+	uint8_t *cluster = calloc(vfat_info.clusters_size, sizeof(uint8_t));
+	if (!cluster) {
+		fputs("Could't allocate memory to read a cluster", stderr);
+		return 0; // 0 byte read
+	}
+
 	do {
 		fat_entry = vfat_info.fat_content[cluster_offset] & 0xFFFFFFF; // Mask the 4 upper bits
 
 		// Read the current cluster
-		uint8_t cluster[vfat_info.clusters_size];
 		read_cluster(cluster, cluster_offset);
 
 		// Processing the directory entries of the current cluster
@@ -472,12 +393,13 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 		cluster_offset = fat_entry;
 	} while (cluster_offset < 0xFFFFFF8 && !done); // Any value greater or equal to 0xFFFFFF8 means end of chain
 
+	free(cluster);
+
 	return 0;
 }
 
 // Recursively find correct file/directory node given the path
-static int
-vfat_resolve(const char *path, struct stat *st)
+static int vfat_resolve(const char *path, struct stat *st)
 {
 	if (strcmp(path, "/") == 0)
 		return vfat_info.boot.fat32.root_cluster;
@@ -502,7 +424,7 @@ vfat_resolve(const char *path, struct stat *st)
 // Get file attributes
 static int64_t vfat_fuse_getattr(const char *path, struct stat *st)
 {
-	DEBUG_PRINT("fuse getattr %s\n", path);
+	//DEBUG_PRINT("fuse getattr %s\n", path);
 	// No such file
 	if (strcmp(path, "/")==0) {
 		st->st_dev = 0; // Ignored by FUSE
@@ -523,11 +445,10 @@ static int64_t vfat_fuse_getattr(const char *path, struct stat *st)
 	return -ENOENT;
 }
 
-static int
-vfat_fuse_readdir(const char *path, void *buf,
+static int vfat_fuse_readdir(const char *path, void *buf,
 		  fuse_fill_dir_t filler, off_t offs, struct fuse_file_info *fi)
 {
-	DEBUG_PRINT("fuse readdir %s\n", path);
+	//DEBUG_PRINT("fuse readdir %s\n", path);
 	//assert(offs == 0);
 
 	uint32_t first_cluster = vfat_resolve(path, NULL);
@@ -539,11 +460,10 @@ vfat_fuse_readdir(const char *path, void *buf,
 	return 0;
 }
 
-static int
-vfat_fuse_read(const char *path, char *buf, size_t size, off_t offs,
+static int vfat_fuse_read(const char *path, char *buf, size_t size, off_t offs,
 	       struct fuse_file_info *fi)
 {
-	DEBUG_PRINT("fuse read %s\n", path);
+	//DEBUG_PRINT("fuse read %s\n", path);
 	assert(size > 1);
 
 	uint32_t first_cluster = vfat_resolve(path, NULL);
@@ -556,8 +476,7 @@ vfat_fuse_read(const char *path, char *buf, size_t size, off_t offs,
 }
 
 ////////////// No need to modify anything below this point
-static int
-vfat_opt_args(void *data, const char *arg, int key, struct fuse_args *oargs)
+static int vfat_opt_args(void *data, const char *arg, int key, struct fuse_args *oargs)
 {
 	if (key == FUSE_OPT_KEY_NONOPT && !vfat_info.dev) {
 		vfat_info.dev = strdup(arg);
@@ -573,8 +492,7 @@ static struct fuse_operations vfat_available_ops = {
 	.destroy = cleanup,
 };
 
-int
-main(int argc, char **argv)
+int main(int argc, char **argv)
 {
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
