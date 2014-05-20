@@ -461,6 +461,7 @@ static int vfat_resolve(const char *path, struct stat *st,
 	name = malloc(sizeof(char) * (length + 1));
 	memset(name, '\0', length + 1);
 	memcpy(name, path_v, length);
+	sd.st= st;
 	sd.name = name;
 	sd.found = 0;
 
@@ -482,9 +483,8 @@ static int vfat_resolve(const char *path, struct stat *st,
 static int vfat_fuse_getattr(const char *path, struct stat *st) {
 	/* XXX: This is example code, replace with your own implementation */
 	DEBUG_PRINT("fuse getattr %s\n", path);
-	struct vfat_search_data sd;
 	struct vfat_direntry e;
-
+	e.first_cluster = vfat_info.boot.fat32.root_cluster;
 	// No such file
 	if (strcmp(path, "/") == 0) {
 		st->st_dev = 0; // Ignored by FUSE
@@ -498,11 +498,8 @@ static int vfat_fuse_getattr(const char *path, struct stat *st) {
 		st->st_blksize = 0; // Ignored by FUSE
 		st->st_blocks = 1;
 		return 0;
-	} else
-		e.first_cluster = vfat_info.boot.fat32.root_cluster;
-		sd.name = path+1;
-		sd.st =st;
-	    vfat_readdir(&e, vfat_search_entry, &sd);
+	}  else {
+		vfat_resolve(path, st, &e);
 		return 0;
 	}
 //	{
@@ -520,7 +517,7 @@ static int vfat_fuse_getattr(const char *path, struct stat *st) {
 //	}
 
 	//return -ENOENT;
-//}
+}
 
 static int vfat_fuse_readdir(const char *path, void *buf,
 		fuse_fill_dir_t filler, off_t offs, struct fuse_file_info *fi) {
