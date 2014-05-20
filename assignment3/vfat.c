@@ -362,7 +362,7 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 	st.st_uid = mount_uid;
 	st.st_gid = mount_gid;
 	st.st_nlink = 1;
-	st.st_mode = S_IRWXU | S_IRWXG | S_IRWXO;
+	st.st_blocks = 1;
 
 	// Following the FAT chain
 	uint32_t fat_entry;
@@ -390,9 +390,9 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 					  (entry.attr & VFAT_ATTR_INVAL) == 0) {
 
 					if (entry.attr & VFAT_ATTR_DIR) {
-						st.st_mode |= S_IFDIR; // Directory
+						st.st_mode = S_IRWXU | S_IRWXG | S_IRWXO | S_IFDIR; // Directory
 					} else {
-						st.st_mode |= S_IFREG; // File
+						st.st_mode = S_IRWXU | S_IRWXG | S_IRWXO | S_IFREG; // File
 					}
 
 					st.st_size = entry.size;
