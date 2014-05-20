@@ -383,7 +383,27 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 						done = filler(fillerdata, name, &st, cluster_location);
 					else
 						done = filler(fillerdata, name, &st, 0);
-				}
+				} 				//This part is for the long file name handling, but it doesn't work very well.
+
+				/*else if ((entry.attr & VFAT_ATTR_LFN) == VFAT_ATTR_LFN) {
+					long_name = 1;
+					struct fat32_direntry_long long_entry; 
+
+					memcpy(&long_entry, &cluster[dir_offset], sizeof(struct fat32_direntry_long));
+
+					uint8_t entry_nb = long_entry.attr & 0xBF;
+					uint8_t offset_in_name = name + 13*(entry_nb-1);
+
+					set_name(&name, offset_in_name, offset_in_name + 5, &(long_entry.name1));
+					set_name(&name, offset_in_name + 5, offset_in_name + 11, &(long_entry.name2));
+					set_name(&name, offset_in_name + 11, offset_in_name + 13, &(long_entry.name3));
+
+					//DEBUG_PRINT("%s \n", name);
+
+					//check if the checksum is ok
+
+
+				}*/
 			}
 
 			dir_offset += DIRECTORY_RECORD_SIZE;
