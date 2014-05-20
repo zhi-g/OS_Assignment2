@@ -329,7 +329,7 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 {
 	struct stat st; // we can reuse same stat entry over and over again
 	//void *buf = NULL;
-	struct fat32_direntry *entry;
+	struct fat32_direntry entry;
 	//char *name;
 	int done = 0;
 
@@ -356,24 +356,24 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 		do {
 			// If the first byte is 0xE5, the directory is unused
 			if (cluster[dir_offset] != 0xE5) {
-				memcpy(entry, &cluster[dir_offset], sizeof(struct fat32_direntry));
+				memcpy(&entry, &cluster[dir_offset], sizeof(struct fat32_direntry));
 
 				// If it's a long file name, we're ignoring it (for now)
-				if ((entry->attr & VFAT_ATTR_LFN) != VFAT_ATTR_LFN) {
-					if (entry->attr & VFAT_ATTR_DIR) {
+				if ((entry.attr & VFAT_ATTR_LFN) != VFAT_ATTR_LFN) {
+					if (entry.attr & VFAT_ATTR_DIR) {
 						st.st_mode |= S_IFDIR;
-					} else if (entry->attr & VFAT_ATTR_VOLUME_ID) {
+					} else if (entry.attr & VFAT_ATTR_VOLUME_ID) {
 						// Volume ID, ignoring...
-					} else if (entry->attr & VFAT_ATTR_INVAL) {
+					} else if (entry.attr & VFAT_ATTR_INVAL) {
 						// Invalid entry, ignoring...
 					} else {
 						st.st_mode |= S_IFREG;
 					}
 
 					char name[12]; // We need one more byte to add the \0 character so that it's a valid C string
-					trim_filename(name, entry->nameext);
+					trim_filename(name, entry.nameext);
 
-					off_t cluster_location = entry->cluster_hi << 16 | entry->cluster_lo;
+					off_t cluster_location = entry.cluster_hi << 16 | entry.cluster_lo;
 
 					// Calling the filler
 					done = filler(fillerdata, name, &st, cluster_location);
@@ -420,6 +420,9 @@ vfat_search_entry(void *data, const char *name, const struct stat *st, off_t off
 static uint32_t
 vfat_resolve(const char *path, struct stat *st)
 {
+	if (strcmp(path, "/") == 0)
+		return vfat_info.boot.fat32.root_cluster;
+	
 	struct vfat_search_data sd;
 
 	char* token = strtok(path, "/");
@@ -469,7 +472,10 @@ vfat_fuse_readdir(const char *path, void *buf,
 	//assert(offs == 0);
 
 	uint32_t first_cluster = vfat_resolve(path, NULL);
-	vfat_readdir(first_cluster, filler, buf);
+
+	if (first_cluster)
+		vfat_readdir(first_cluster, filler, buf);
+	
 	//filler(buf, "b.txt", NULL, 0);
 	return 0;
 }
