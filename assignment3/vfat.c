@@ -272,6 +272,7 @@ static void check_boot_validity(const struct fat_boot* data) {
  * Free ressources
  */
 static void cleanup(void) {
+	puts("Exiting...");
 	free(vfat_info.fat_content);
 }
 
@@ -322,9 +323,6 @@ vfat_init(const char *dev)
 	puts("=============================");
 	//read_file(783, 458759); // Big file
 	read_file(259, 10); // Small file
-
-	// Free Willy !
-	cleanup();
 }
 
 static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fillerdata)
@@ -333,7 +331,7 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 	//void *buf = NULL;
 	struct fat32_direntry *entry;
 	//char *name;
-	int found = 0;
+	int done = 0;
 
 	memset(&st, 0, sizeof(st));
 	st.st_uid = mount_uid;
@@ -378,16 +376,16 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 					off_t cluster_location = entry->cluster_hi << 16 | entry->cluster_lo;
 
 					// Calling the filler
-					found = filler(fillerdata, name, &st, cluster_location);
+					done = filler(fillerdata, name, &st, cluster_location);
 				}
 			}
 
 			dir_offset += DIRECTORY_RECORD_SIZE;
-		} while (cluster[dir_offset] != 0x00 && !found); // If the first byte is 0x00, end of directory
+		} while (cluster[dir_offset] != 0x00 && !done); // If the first byte is 0x00, end of directory
 
 
 		cluster_offset = fat_entry;
-	} while (cluster_offset < 0xFFFFFF8 && !found); // Any value greater or equal to 0xFFFFFF8 means end of chain
+	} while (cluster_offset < 0xFFFFFF8 && !done); // Any value greater or equal to 0xFFFFFF8 means end of chain
 
 	return 0;
 }
@@ -411,14 +409,15 @@ vfat_search_entry(void *data, const char *name, const struct stat *st, off_t off
 		return (0);
 
 	sd->found = 1;
-	*sd->st = *st;
+	if (sd->st != NULL)
+		*sd->st = *st;
 	sd->first_cluster = offs;
 
 	return (1);
 }
 
 // Recursively find correct file/directory node given the path
-static int
+static uint32_t
 vfat_resolve(const char *path, struct stat *st)
 {
 	struct vfat_search_data sd;
@@ -435,7 +434,7 @@ vfat_resolve(const char *path, struct stat *st)
 		token = strtok(NULL, "/");
 	} while (token != NULL);
 
-	return sd.found;
+	return sd.found ? sd.first_cluster : 0;
 }
 
 // Get file attributes
@@ -469,7 +468,9 @@ vfat_fuse_readdir(const char *path, void *buf,
 	DEBUG_PRINT("fuse readdir %s\n", path);
 	//assert(offs == 0);
 
-	filler(buf, "b.txt", NULL, 0);
+	uint32_t first_cluster = vfat_resolve(path, NULL);
+	vfat_readdir(first_cluster, filler, buf);
+	//filler(buf, "b.txt", NULL, 0);
 	return 0;
 }
 
@@ -502,6 +503,7 @@ static struct fuse_operations vfat_available_ops = {
 	.getattr = vfat_fuse_getattr,
 	.readdir = vfat_fuse_readdir,
 	.read = vfat_fuse_read,
+	.destroy = cleanup,
 };
 
 int
