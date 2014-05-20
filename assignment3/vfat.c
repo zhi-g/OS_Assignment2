@@ -198,11 +198,44 @@ static void read_file_cluster(size_t cluster_number, size_t n) {
 
 /*
  * Read the file
+ * Return the number of bytes read
  */
-static void read_file(size_t cluster_number, size_t size) {
+static size_t read_file(size_t first_cluster, char *buf, size_t size, off_t offset) {
 	assert(size > 0);
 
-	follow_fat_chain(cluster_number, read_file_cluster, size);
+	//DEBUG_PRINT("Reading %zu bytes starting at offset %d\n", size, offset);
+
+	// Following the FAT chain
+	uint32_t fat_entry;
+	uint32_t cluster_number = first_cluster;
+	size_t read_so_far = 0;
+
+	do {
+		fat_entry = vfat_info.fat_content[cluster_number] & 0xFFFFFFF; // Mask the 4 upper bits
+		//DEBUG_PRINT("Processing cluster #%zu (next is #%zu). Offset is %d\n", cluster_number, fat_entry, offset);
+
+		if (offset < vfat_info.clusters_size) { // We need to read in the current cluster
+			size_t to_read = size < vfat_info.clusters_size ? size : vfat_info.clusters_size - offset;
+			//DEBUG_PRINT("We need to read %zu bytes in cluster %zu\n", to_read, cluster_number);
+			
+			uint8_t cluster[vfat_info.clusters_size];
+			read_cluster(cluster, cluster_number);
+
+			memcpy(buf + read_so_far, cluster + offset, to_read);
+			//DEBUG_PRINT("Wrote %zu bytes to the buffer at offset %d\n", to_read, read_so_far);
+
+			size -= to_read;
+			read_so_far += to_read;
+			//DEBUG_PRINT("We still need to read %zu bytes, and we've read %zu bytes so far.\n", size, read_so_far);
+		} else { // We just need to go to the next cluster
+			//DEBUG_PRINT("Skipping to the next cluster\n");
+			offset -= vfat_info.clusters_size;
+		}
+
+		cluster_number = fat_entry;
+	} while (cluster_number < 0xFFFFFF8 && size > 0); // Any value greater or equal to 0xFFFFFF8 means end of chain
+
+	return read_so_far;
 }
 
 /*
@@ -312,17 +345,6 @@ vfat_init(const char *dev)
 	
 	// Print the FAT for debugging matters
 	//hex_print(vfat_info.fat_content, vfat_info.fat_size);
-
-	puts("=============================");
-	puts(" Reading the root directory ");
-	puts("=============================");
-	read_directory(vfat_info.boot.fat32.root_cluster);
-
-	puts("=============================");
-	puts("Reading a file...");
-	puts("=============================");
-	//read_file(783, 458759); // Big file
-	read_file(259, 10); // Small file
 }
 
 // Used by vfat_search_entry()
@@ -370,7 +392,6 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 
 	do {
 		fat_entry = vfat_info.fat_content[cluster_offset] & 0xFFFFFFF; // Mask the 4 upper bits
-		DEBUG_PRINT("Processing cluster #%zu (next is #%zu)\n", cluster_offset, fat_entry);
 
 		// Read the current cluster
 		uint8_t cluster[vfat_info.clusters_size];
@@ -488,14 +509,16 @@ static int
 vfat_fuse_read(const char *path, char *buf, size_t size, off_t offs,
 	       struct fuse_file_info *fi)
 {
-	/* XXX: This is example code, replace with your own implementation */
 	DEBUG_PRINT("fuse read %s\n", path);
 	assert(size > 1);
-	buf[0] = 'X';
-	buf[1] = 'Y';
-	/* XXX add your code here */
-	return 2; // number of bytes read from the file
-		  // must be size unless EOF reached, negative for an error 
+
+	uint32_t first_cluster = vfat_resolve(path, NULL);
+
+	if (first_cluster) {
+		return read_file(first_cluster, buf, size, offs);
+	} else {
+		return -1; // not found
+	}
 }
 
 ////////////// No need to modify anything below this point
