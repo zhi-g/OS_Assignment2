@@ -329,11 +329,9 @@ static void vfat_init(const char *dev) {
 	puts("=============================");
 	//read_directory(vfat_info.boot.fat32.root_cluster);
 
-	// puts("=============================");
-	// puts("Reading a file...");
-	// puts("=============================");
-	//read_file(783, 458759); // Big file
-	//read_file(259, 10); // Small file
+	puts("Reading a file...");
+	//read_file(783, 458759);
+	//read_file(259, 10);
 
 	// Free Willy !
 	//cleanup();
@@ -364,7 +362,7 @@ vfat_readdir(struct vfat_direntry *e, fuse_fill_dir_t filler, void *fillerdata) 
 	unsigned int next_offset = 0;
 
 	do {
-		memset(name, "\0",12);
+		memset(name, '\0', 12);
 
 		next_offset += DIRECTORY_RECORD_SIZE;
 
@@ -375,6 +373,7 @@ vfat_readdir(struct vfat_direntry *e, fuse_fill_dir_t filler, void *fillerdata) 
 			// If it's a long file name, we're ignoring it (for now)
 			if ((entry.attr & VFAT_ATTR_LFN) != VFAT_ATTR_LFN) {
 				if (entry.attr & VFAT_ATTR_DIR) {
+					st.st_mode = S_IFDIR | (0777 & entry.attr);
 					printf("[D] ");
 				} else if (entry.attr & VFAT_ATTR_VOLUME_ID) {
 					printf("[V] ");
@@ -382,17 +381,19 @@ vfat_readdir(struct vfat_direntry *e, fuse_fill_dir_t filler, void *fillerdata) 
 					printf("[I] ");
 				} else {
 					printf("[F] ");
+					st.st_mode = S_IFREG | (0777 & entry.attr);
 				}
+
+				st.st_size = entry.size;
 				// FIx me .. allocation of  name with MAXNAMELENGTH
 				// We need one more byte to add the \0 character so that it's a valid C string
 				trim_filename(name, entry.nameext);
 
 				e->first_cluster = entry.cluster_hi << 16 | entry.cluster_lo;
 				printf("%-11s - %u Bytes (First cluster = %u, offset = %08X)\n",
-						name, entry.size, e->first_cluster,
-						offset);
+						name, entry.size, e->first_cluster, offset);
 
-				filler(buf, name, NULL, 0);
+				filler(buf, name, &st, 0);
 
 			}
 
@@ -401,7 +402,7 @@ vfat_readdir(struct vfat_direntry *e, fuse_fill_dir_t filler, void *fillerdata) 
 
 		offset += DIRECTORY_RECORD_SIZE;
 
-	} while (  cluster[offset] != 0); // If the first byte is 0x00, end of directory
+	} while (cluster[offset] != 0); // If the first byte is 0x00, end of directory
 	return cluster[offset];
 }
 
@@ -422,7 +423,7 @@ static int vfat_search_entry(void *data, const char *name,
 		return (0);
 
 	sd->found = 1;
-	*sd->st = *st;
+	sd->st = st;
 
 	return (1);
 }
@@ -437,6 +438,7 @@ static int vfat_resolve(const char *path, struct stat *st,
 	char *name;
 	int length;
 	int size;
+	char *next;
 	size = strlen(path) + 1;
 	path_v = malloc(sizeof(char) * size);
 	memset(path_v, '\0', size);
@@ -445,16 +447,23 @@ static int vfat_resolve(const char *path, struct stat *st,
 	path_v = path_v + strspn(path_v, ch); //for leading "/";
 
 	name = strchr(path_v, ch);
-	length = name - path_v;
+	length = size - 1;
+	if (name != 0) {
+		length = name - path_v;
+	}
+
 	name = malloc(sizeof(char) * (length + 1));
 	memset(name, '\0', length + 1);
 	memcpy(name, path_v, length);
 	sd.name = name;
+	sd.found = 0;
 
 	vfat_readdir(e, vfat_search_entry, &sd);
 	if (sd.found) {
-
-		vfat_resolve(strchr(path_v, ch), st, e);
+		next = strchr(path_v, ch);
+		if (next != 0) {
+			vfat_resolve(next, st, e);
+		}
 
 	}
 
@@ -467,6 +476,8 @@ static int vfat_resolve(const char *path, struct stat *st,
 static int vfat_fuse_getattr(const char *path, struct stat *st) {
 	/* XXX: This is example code, replace with your own implementation */
 	DEBUG_PRINT("fuse getattr %s\n", path);
+	struct vfat_direntry e;
+	e.first_cluster = vfat_info.boot.fat32.root_cluster;
 	// No such file
 	if (strcmp(path, "/") == 0) {
 		st->st_dev = 0; // Ignored by FUSE
@@ -480,22 +491,25 @@ static int vfat_fuse_getattr(const char *path, struct stat *st) {
 		st->st_blksize = 0; // Ignored by FUSE
 		st->st_blocks = 1;
 		return 0;
-	}
-	if (strcmp(path, "/a.txt") == 0 || strcmp(path, "/b.txt") == 0) {
-		st->st_dev = 0; // Ignored by FUSE
-		st->st_ino = 0; // Ignored by FUSE unless overridden
-		st->st_mode = S_IRWXU | S_IRWXG | S_IRWXO | S_IFREG;
-		st->st_nlink = 1;
-		st->st_uid = mount_uid;
-		st->st_gid = mount_gid;
-		st->st_rdev = 0;
-		st->st_size = 10;
-		st->st_blksize = 0; // Ignored by FUSE
-		st->st_blocks = 1;
+	} else {
+		vfat_resolve(path, st, &e);
 		return 0;
 	}
+//	if (strcmp(path, "/a.txt") != 0) {
+//		st->st_dev = 0; // Ignored by FUSE
+//		st->st_ino = 0; // Ignored by FUSE unless overridden
+//		st->st_mode = S_IRWXU | S_IRWXG | S_IRWXO | S_IFREG;
+//		st->st_nlink = 1;
+//		st->st_uid = mount_uid;
+//		st->st_gid = mount_gid;
+//		st->st_rdev = 0;
+//		st->st_size = 0;
+//		st->st_blksize = 0; // Ignored by FUSE
+//		st->st_blocks = 1;
+//		return 0;
+//	}
 
-	return -ENOENT;
+	//return -ENOENT;
 }
 
 static int vfat_fuse_readdir(const char *path, void *buf,
@@ -516,8 +530,7 @@ static int vfat_fuse_readdir(const char *path, void *buf,
 
 	}
 	if (res)
-		vfat_readdir(&e,filler,buf);
-
+		vfat_readdir(&e, filler, buf);
 
 	//assert(offs == 0);
 	/* XXX add your code here */
