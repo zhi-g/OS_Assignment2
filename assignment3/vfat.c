@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 
 #ifdef __APPLE__
   #include <osxfuse/fuse.h>
@@ -125,8 +126,16 @@ static void trim_filename(char* output, char* nameext) {
 		size_t i;
 		size_t out_offset = 0;
 
-		for (i = 0; i < 11; ++i) { // Short names are always 11 characters long
+		for (i = 0; i < 8; ++i) { // Filename is 8 characters long
 			if (nameext[i] != 0x20) { // The character is not a space
+				output[out_offset++] = nameext[i];
+			}
+		}
+
+		for (i = 8; i < 11; ++i) { // Extension is 3 characters long and begin at character 11
+			if (nameext[i] != 0x20) { // The character is not a space
+				if (i == 8) // We need to add a dot before the extension (if there is one)
+					output[out_offset++] = '.';
 				output[out_offset++] = nameext[i];
 			}
 		}
@@ -372,6 +381,26 @@ vfat_search_entry(void *data, const char *name, const struct stat *st, off_t off
 	return (1);
 }
 
+static time_t to_unix_time(uint16_t fat_date, uint16_t fat_time) {
+	struct tm time_struct;
+
+  uint8_t day = fat_date & 0x001F;
+  uint8_t month = (fat_date & 0x01E0) >> 5;
+  uint8_t year = (fat_date & 0xFE00) >> 9;
+	time_struct.tm_year = year + 80;
+	time_struct.tm_mon = month - 1;
+	time_struct.tm_mday = day;
+
+	uint8_t seconds = fat_time & 0x001F;
+	uint8_t minutes = (fat_time & 0x07E0) >> 5;
+	uint8_t hours = (fat_time & 0xF800) >> 11;
+	time_struct.tm_sec = seconds * 2;
+	time_struct.tm_min = minutes;
+	time_struct.tm_hour = hours;
+
+	return mktime(&time_struct);
+}
+
 static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fillerdata)
 {
 	struct stat st; // we can reuse same stat entry over and over again
@@ -418,8 +447,13 @@ static int vfat_readdir(uint32_t first_cluster, fuse_fill_dir_t filler, void *fi
 
 					st.st_size = entry.size;
 
-					char name[12]; // We need one more byte to add the \0 character so that it's a valid C string
+					char name[13]; // We need two more bytes, one to add the dot between the name and the extension, the other for the \0 character so that it's a valid C string
 					trim_filename(name, entry.nameext);
+
+					// Set times
+					st.st_ctime = to_unix_time(entry.ctime_date, entry.ctime_time);
+					st.st_atime = to_unix_time(entry.atime_date, 0);
+					st.st_mtime = to_unix_time(entry.mtime_date, entry.mtime_time);
 
 					off_t cluster_location = entry.cluster_hi << 16 | entry.cluster_lo;
 
